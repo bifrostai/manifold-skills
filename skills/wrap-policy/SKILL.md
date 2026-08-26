@@ -1,11 +1,11 @@
 ---
 name: wrap-policy
 description: >
-  Wrap a researcher's policy as a Manifold beta pairing module (PROFILE /
+  Wrap a researcher's policy for the Manifold beta platform (PROFILE /
   BENCHMARK / PIPELINE), then prove it with check_compatibility, verify, and a
   live run of the driver. Use when asked to "wrap my policy for Manifold",
   "get this checkpoint running on beta", "pair <model> with LIBERO / SIMPLER /
-  RoboCasa", "write a pairing module", "why is check_compatibility INCOMPATIBLE",
+  RoboCasa", "write a wrap", "why is check_compatibility INCOMPATIBLE",
   "why did the server reject my pairing", or when deciding whether a checkpoint
   can pair with a shipped benchmark.
 compatibility: >
@@ -18,10 +18,10 @@ compatibility: >
 
 ## Summary
 
-Wrap one policy so a Manifold benchmark can drive it. The output is a **pairing
-module**: a Python module exporting `PROFILE`, `BENCHMARK`, `PIPELINE` that
-`manifold.recipes.read_pairing` reads. Done when the gates are green AND the
-driver has run live.
+Wrap one policy so a Manifold benchmark can drive it. The output is a Python
+module that exports `PROFILE`, `BENCHMARK`, `PIPELINE`. You load it with
+`manifold.recipes.read_pairing`. Done when both `check_compatibility` and
+`verify` pass AND the driver has run live.
 
 Three rules:
 
@@ -391,7 +391,7 @@ touch. Quote `not_checked` in the handoff — do not claim "verified."
 python -c "
 import importlib
 from manifold.recipes import read_pairing
-print(read_pairing(importlib.import_module('<your pairing module>')))
+print(read_pairing(importlib.import_module('<your wrap module>')))
 "
 ```
 

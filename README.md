@@ -6,7 +6,8 @@ AI agent skills for the Manifold platform. Each skill guides an agent through a 
 
 | Skill | What it does |
 |---|---|
-| [`wrap-policy`](skills/wrap-policy/SKILL.md) | Wrap a researcher's policy checkpoint as a Manifold pairing module (`PROFILE` / `BENCHMARK` / `PIPELINE`), gate it with `check_compatibility` and `verify`, and prove it with a live driver run. |
+| [`wrap-policy`](skills/wrap-policy/SKILL.md) | Wrap a researcher's policy checkpoint for Manifold (`PROFILE` / `BENCHMARK` / `PIPELINE`), validate it with `check_compatibility` and `verify`, and prove it with a live driver run. |
+| [`containerize-wrap`](skills/containerize-wrap/SKILL.md) | Package a verified policy wrap as a container image, push it to a registry, register it on the platform, and validate it with a scored test run. |
 
 ## Usage
 
