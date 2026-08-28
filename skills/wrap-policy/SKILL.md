@@ -25,6 +25,26 @@ data through the PIPELINE only. Any wrong gripper polarity, action width, or
 proprioception can pass them but crash (or fail silently) at runtime — which
 is why the live `evaluate` run is mandatory.
 
+## Rules
+
+**Plan the entire task in a to-do list before you start, and update it as
+you go.** Use whichever planning tool your harness provides:
+
+- **Claude Code:** `TaskCreate` to seed the plan, `TaskUpdate` to move items
+  between `pending` / `in_progress` / `completed`, `TaskList` / `TaskGet` to
+  read state.
+- **Codex:** use `update_plan` to create and maintain an ordered plan, with
+  exactly one item `in_progress` at a time. Keep validation as an explicit item
+  until it passes.
+- **Other harnesses:** check the harness for a to-do list or planning tool
+  before using the fallback below.
+- **No planning tool available:** keep the plan as a plain-text checklist in
+  your responses and re-post it (with statuses updated) each time you advance.
+
+The intent is (1) to **structure the work** so nothing gets skipped, and
+(2) to **stay accountable and informative** by updating the list as steps
+start and finish, so the user can follow along without asking.
+
 ## Folder structure
 
 | File | Description | Imports model stack? |
