@@ -580,6 +580,33 @@ it exists to prove the driver code runs end to end.
 
 ---
 
+## Stop here — hand back to the user
+
+The skill ends at the checklist above. Do **not** invoke another skill
+automatically. In particular, do **not** call `/containerize-wrap` on
+your own after saying "the wrap is proven" — that skill costs registry
+storage and often cloud time, and the user has to opt in before any of
+that happens.
+
+The pairing (wrap → containerize) is a two-step handoff by design.
+Chaining them into one action skips the user's chance to review the
+wrap before spending real resources, and new users don't yet have the
+mental model to know the second step is coming.
+
+Hand back to the user with a short summary:
+
+- Which wrap was written (module path, pairing name).
+- What was proven (checks, verify, evaluate — quote any `not_checked`
+  entries).
+- What was not proven (open questions, credentials the user still
+  needs to arrange, benchmark score not yet measured).
+- The suggested next skill (`/containerize-wrap`) with a note that the
+  user should invoke it themselves when they are ready.
+
+Then stop. Wait for the user to decide what to do next.
+
+---
+
 ## Reference: import paths
 
 - `manifold.recipes` — `read_pairing`, `launch_server`, `serve`, `evaluate`,

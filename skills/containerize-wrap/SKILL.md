@@ -43,6 +43,14 @@ This skill does not fix wrap bugs. If the wrap does not pass both
 
 ## Rules
 
+**Do not run this skill without an explicit user invocation.** If another
+skill (for example `/wrap-policy`) has just finished, stop and wait for
+the user to ask for containerization by name. Do **not** chain into this
+skill on your own after "the wrap is proven" or any similar success line.
+The two-step handoff (wrap → containerize) exists so the user can review
+the wrap before spending registry storage and cloud time; auto-chaining
+skips that review.
+
 **Plan the entire task in a to-do list before you start, and update it as
 you go.** Use whichever planning tool your harness provides:
 
