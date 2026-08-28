@@ -7,7 +7,7 @@ AI agent skills for the Manifold platform.
 | Skill | What it does |
 |---|---|
 | [`wrap-policy`](skills/wrap-policy/SKILL.md) | Wrap a researcher's policy for Manifold: write the driver, profile, and pairing files; pass `check_compatibility` and `verify`; prove it with a live `evaluate` run. Three phases: understand, design, implement. |
-| [`containerize-wrap`](skills/containerize-wrap/SKILL.md) | Package a verified policy wrap as a container image, push it to a registry, register it on the platform, and validate it with a scored test run. |
+| [`containerize-wrap`](skills/containerize-wrap/SKILL.md) | Package a verified policy wrap as a container image, push it to a registry, and register it on the platform. Then ask the user whether to submit a scored test run. Four phases: understand, design, build & push, register & offer a test run. |
 
 ## Installation
 
