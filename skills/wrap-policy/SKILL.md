@@ -5,9 +5,10 @@ description: >
   check_compatibility, verify, and a live run of the driver. Use when asked to
   prepare a policy for Manifold.
 compatibility: >
-  The original policy's environment should be installed, alongside the
-  manifold-sdk, via `uv pip install -e <sdk-repo>`. The manifold-sdk repo root
-  must be on PYTHONPATH.
+  Run this skill from the user's policy project directory, after
+  `/setup` has written `<project>/.manifold/CONTEXT.md`. Everything this
+  skill writes goes inside `<project>/.manifold/<slug>/`, where `<slug>`
+  is the policy name recorded in `CONTEXT.md`.
 ---
 
 ## Summary
@@ -26,6 +27,34 @@ proprioception can pass them but crash (or fail silently) at runtime — which
 is why the live `evaluate` run is mandatory.
 
 ## Rules
+
+**Run in the user's policy directory.** This skill acts on the folder
+that is your current working directory — the same one `/setup` ran in.
+Before anything else, confirm `<project>/.manifold/CONTEXT.md` exists
+at the root; if it does not, stop and ask the user to run `/setup`
+first. If the current directory does not look like their policy project
+(no `pyproject.toml` / `requirements.txt` or similar), ask for the
+correct path.
+
+**Read `.manifold/CONTEXT.md` first.** Setup already interviewed the
+user and recorded everything wrap-policy would otherwise ask —
+package manager, source folders, weights location, GPU / VRAM,
+deployment style, registry, and the policy slug and benchmarks of
+interest. Read that file before asking the user anything; ask only
+about details `CONTEXT.md` does not already cover.
+
+**Jobs setup delegated to this skill.** Setup wrote `CONTEXT.md` and
+nothing else. Before you write any wrap code:
+
+- Add `manifold-sdk` to the project's dependency file **and** install it
+  into the project's environment. `uv add manifold-sdk` and
+  `poetry add manifold-sdk` do both in one command. With plain
+  `requirements.txt`, do both steps: append `manifold-sdk` to the file
+  and run `pip install manifold-sdk`. Recording without installing (or
+  the reverse) leaves the project half-set-up. If the install fails on
+  a dependency conflict, stop and hand the error to the user.
+- Create the folder `<project>/.manifold/<slug>/` — the slug is in
+  `CONTEXT.md`. All wrap files below live inside it.
 
 **Plan the entire task in a to-do list before you start, and update it as
 you go.** Use whichever planning tool your harness provides:
@@ -47,15 +76,18 @@ start and finish, so the user can follow along without asking.
 
 ## Folder structure
 
-| File | Description | Imports model stack? |
+All wrap files live under `<project>/.manifold/<slug>/`, where
+`<slug>` is the policy name recorded in `CONTEXT.md`:
+
+| File | Description | Imports the model? |
 |---|---|---|
-| `driver.py` | endpoint + session | yes |
-| `profile.py` | frozen dataclass: signature, weights, chunk, exec_steps, layouts, `load()` | no |
-| `<policyname>_<benchmarkname>.py` | pairing file — exports `PROFILE` / `BENCHMARK` / `PIPELINE` | no |
+| `.manifold/<slug>/driver.py` | endpoint + session | yes |
+| `.manifold/<slug>/profile.py` | frozen dataclass: signature, weights, chunk, exec_steps, layouts, `load()` | no |
+| `.manifold/<slug>/<benchmark>.py` | pairing file — exports `PROFILE` / `BENCHMARK` / `PIPELINE` (one file per benchmark) | no |
 
 - `driver.py` loads the model onto the GPU and runs it.
 - `profile.py` is a lightweight spec describing what the model expects (image sizes, state shape, chunk length, weights path).
-- `<policyname>_<benchmarkname>.py` is the pairing file. It builds the signature and layouts, instantiates the profile, and declares `PROFILE`, `BENCHMARK`, and `PIPELINE`.
+- `<benchmark>.py` is the pairing file. It builds the signature and layouts, instantiates the profile, and declares `PROFILE`, `BENCHMARK`, and `PIPELINE`.
 
 `PROFILE` points at the model spec (from profile.py)
 `BENCHMARK` points at the test to run

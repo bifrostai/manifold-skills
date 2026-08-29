@@ -7,9 +7,12 @@ description: >
   wrap to ghcr", "register my policy on the platform", or "get my wrap running
   on the platform".
 compatibility: >
-  Requires docker and a push credential for the target container registry (ghcr
-  by default). Requires the manifold CLI (manifold auth login). Input is a
-  wrap that passes check_compatibility and verify under the wrap-policy skill.
+  Run this skill from the user's policy project directory, after
+  `/wrap-policy` has written the wrap files under
+  `<project>/.manifold/<slug>/`. Requires docker, a push credential for
+  the target container registry (ghcr by default), and the manifold CLI
+  authenticated with `manifold auth login`. Input is a wrap that passes
+  check_compatibility and verify under wrap-policy.
 ---
 
 ## Summary
@@ -20,11 +23,12 @@ platform.
 
 The output is four things:
 
-1. **A `Dockerfile`** that this skill writes next to the wrap. It builds
-   the policy image.
-2. **A launcher script** (`serve.py`) that this skill writes next to the
-   wrap. It imports the pairing module and calls `launch_server`. Phase 3
-   shows the exact code to paste in.
+1. **A `Dockerfile`** written to `<project>/.manifold/<slug>/Dockerfile`.
+   It builds the policy image with the project root as the build
+   context.
+2. **A launcher script** written to `<project>/.manifold/<slug>/serve.py`.
+   It imports the pairing module from `.manifold/<slug>/` and calls
+   `launch_server`. Phase 3 shows the exact code to paste in.
 3. **A container image** pushed to the registry at the agreed name and
    tag (e.g. `ghcr.io/<org>/policy-<slug>:0.1.0`).
 4. **A registered policy version** on the Manifold platform. This is a
@@ -42,6 +46,25 @@ This skill does not fix wrap bugs. If the wrap does not pass both
 `check_compatibility` and `verify`, go back to `wrap-policy` first.
 
 ## Rules
+
+**Run in the user's policy directory.** This skill acts on the folder
+that is your current working directory — the same one `/setup` and
+`/wrap-policy` ran in. Before anything else, confirm
+`<project>/.manifold/CONTEXT.md` exists and that `.manifold/<slug>/`
+(with the wrap files in it) exists too. If either is missing, stop
+and ask the user to run the earlier skills first.
+
+**Read `.manifold/CONTEXT.md` first.** Setup already recorded the
+package manager, registry, weights location, deployment style, GPU /
+VRAM, and benchmarks of interest; wrap-policy added anything else it
+learned. Read `CONTEXT.md` before asking the user anything; ask only
+about details it does not cover.
+
+**Write into `.manifold/<slug>/`.** The `Dockerfile` and `serve.py`
+this skill produces both live under
+`<project>/.manifold/<slug>/`, next to the wrap files. `docker build`
+runs with the project root as the build context so the whole project
+is available to `COPY`.
 
 **Do not run this skill without an explicit user invocation.** If another
 skill (for example `/wrap-policy`) has just finished, stop and wait for
