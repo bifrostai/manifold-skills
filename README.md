@@ -6,6 +6,7 @@ AI agent skills for the Manifold platform.
 
 | Skill | What it does |
 |---|---|
+| [`setup`](skills/setup/SKILL.md) | Set up a project for Manifold: gather what the wrap and container steps will need, and write it to `.manifold/CONTEXT.md`. Three phases: look at the project, interview, write CONTEXT.md. |
 | [`wrap-policy`](skills/wrap-policy/SKILL.md) | Wrap a researcher's policy for Manifold: write the driver, profile, and pairing files; pass `check_compatibility` and `verify`; prove it with a live `evaluate` run. Three phases: understand, design, implement. |
 | [`containerize-wrap`](skills/containerize-wrap/SKILL.md) | Package a verified policy wrap as a container image, push it to a registry, and register it on the platform. Then ask the user whether to submit a scored test run. Four phases: understand, design, build & push, register & offer a test run. |
 
