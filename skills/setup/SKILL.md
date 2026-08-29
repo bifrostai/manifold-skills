@@ -231,6 +231,11 @@ Summarize what was written:
 - The file created (`.manifold/CONTEXT.md`).
 - A one-line recap of the recorded context: policy name, registry,
   weights location, benchmarks of interest.
+- Any prerequisites Phase 1 found missing that a later skill will
+  need — for example, Docker not installed or not reachable, or no
+  GPU on a machine where the deployment style needs one. Point the
+  user at how to install / arrange them (e.g. Docker's install docs)
+  so they can fix it before the next skill runs.
 
 Then ask something like: **"Ready to prepare your policy for use with
 Manifold?"** Do not name the next skill.
