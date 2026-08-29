@@ -540,6 +540,47 @@ wrap bug until proven otherwise. Go back to `wrap-policy` Phase 3, fix
 the pipeline or session, bump the tag, and re-enter this skill at
 Phase 3.
 
+### If the container ran out of GPU memory
+
+An OOM at runtime means the VRAM floor registered with the version was
+too low for the model. The wrap code and the image itself are fine.
+Signals:
+
+- `manifold run get <run-id>` shows the run as failed with an
+  out-of-memory reason.
+- The container's stderr (from the platform's logs, or from a local
+  test run) says "CUDA out of memory" (torch),
+  "RESOURCE_EXHAUSTED" (jax), or the container was `OOMKilled`
+  (visible via `docker inspect` on a local run).
+
+**Ask the user before bumping.** A re-register plus a new run is
+another spend cycle. State the current floor, the higher floor you
+want (round the observed peak up, add ~20% headroom), and the fact
+that the image contents do not change. If the user declines, stop.
+
+If the user says yes, the fix is a re-tag, push, and re-register — no
+rebuild needed since the image is unchanged:
+
+```sh
+# Same image contents, new tag.
+docker tag <registry>/<namespace>/policy-<slug>:<old-tag> \
+           <registry>/<namespace>/policy-<slug>:<new-tag>
+docker push <registry>/<namespace>/policy-<slug>:<new-tag>
+
+# Re-register the new tag with the higher floor.
+manifold policy init <slug> \
+  --image <registry>/<namespace>/policy-<slug>:<new-tag> \
+  --minimum-gpu-memory-gb <new-floor>
+```
+
+Then offer another scored test run against the same benchmark. If it
+OOMs again, repeat with a higher floor — each retry needs a fresh
+user yes. Do not silently keep bumping.
+
+Also update `CONTEXT.md`'s peak-VRAM entry for this policy to the
+value that actually worked, so future runs of setup don't lowball
+again.
+
 > **Phase 4 checkpoint:**
 > ```
 > slug                          = ?
@@ -559,6 +600,12 @@ Phase 3.
 > score_within_noise            = yes | no (if no: investigate)
 > first_frames_checked          = yes | no
 > action_range_checked          = yes | no
+> container_oom                 = yes | no
+> (if yes:)
+> vram_bump_confirmed_by_user   = yes | no
+> new_tag                       = ?
+> new_gpu_memory_floor_gb       = ?
+> context_md_vram_updated       = yes | no
 > ```
 
 ---
@@ -613,3 +660,9 @@ If the user asked for a test run:
 - [ ] Benchmark chosen by the user; submit confirmed before running
 - [ ] Test run completed; score compared to reference
 - [ ] First frames and action ranges inspected
+- [ ] Container OOM checked (from `manifold run get` and the container's
+      stderr)
+- [ ] If OOM: user asked before bumping VRAM; image re-tagged and pushed
+      (no rebuild); new tag re-registered with a higher
+      `--minimum-gpu-memory-gb`; `CONTEXT.md`'s peak VRAM updated to
+      what worked
