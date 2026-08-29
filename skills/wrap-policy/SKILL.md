@@ -588,10 +588,10 @@ your own after saying "the wrap is proven" — that skill costs registry
 storage and often cloud time, and the user has to opt in before any of
 that happens.
 
-The pairing (wrap → containerize) is a two-step handoff by design.
+Each step in the Manifold flow is a separate skill by design.
 Chaining them into one action skips the user's chance to review the
 wrap before spending real resources, and new users don't yet have the
-mental model to know the second step is coming.
+mental model to know the next step is coming.
 
 Hand back to the user with a short summary:
 
