@@ -28,23 +28,31 @@ is why the live `evaluate` run is mandatory.
 
 ## Rules
 
-**Run in the user's policy directory.** This skill acts on the folder
-that is your current working directory — the same one `/setup` ran in.
-Before anything else, confirm `<project>/.manifold/CONTEXT.md` exists
-at the root; if it does not, stop and ask the user to run `/setup`
+**Confirm before doing anything else.** First thing after this skill
+loads, tell the user in your own words what it will do and why —
+adding `manifold-sdk` to the project's deps and creating files under
+`<project>/.manifold/`, both so the wrap can run in their own
+environment against their own model code. Wait for a yes before
+reading `CONTEXT.md` or touching anything.
+
+**Run in the user's policy directory.** Once the user has said yes,
+confirm the current working directory is their policy project — the
+same one `/setup` ran in. Look for `<project>/.manifold/CONTEXT.md` at
+the root; if it does not exist, stop and ask the user to run `/setup`
 first. If the current directory does not look like their policy project
 (no `pyproject.toml` / `requirements.txt` or similar), ask for the
 correct path.
 
-**Read `.manifold/CONTEXT.md` first.** Setup already interviewed the
+**Read `.manifold/CONTEXT.md` next.** Setup already interviewed the
 user and recorded everything wrap-policy would otherwise ask —
 package manager, source folders, weights location, GPU / VRAM,
 deployment style, registry, and the policy slug and benchmarks of
-interest. Read that file before asking the user anything; ask only
-about details `CONTEXT.md` does not already cover.
+interest. Read that file before asking the user anything else; ask
+only about details `CONTEXT.md` does not already cover.
 
 **Jobs setup delegated to this skill.** Setup wrote `CONTEXT.md` and
-nothing else. Before you write any wrap code:
+nothing else. Once you've read it, do these before writing any wrap
+code:
 
 - Add `manifold-sdk` to the project's dependency file **and** install it
   into the project's environment. `uv add manifold-sdk` and

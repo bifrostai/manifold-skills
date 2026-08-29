@@ -47,12 +47,20 @@ This skill does not fix wrap bugs. If the wrap does not pass both
 
 ## Rules
 
-**Run in the user's policy directory.** This skill acts on the folder
-that is your current working directory — the same one `/setup` and
-`/wrap-policy` ran in. Before anything else, confirm
-`<project>/.manifold/CONTEXT.md` exists and that `.manifold/<slug>/`
-(with the wrap files in it) exists too. If either is missing, stop
-and ask the user to run the earlier skills first.
+**Confirm before doing anything else.** First thing after this skill
+loads, tell the user in your own words what it will do and why —
+building a Docker image (10–30 GB of local disk), pushing it to their
+registry, and registering it on Manifold, so the platform can pull and
+run their policy against benchmarks. Wait for a yes before reading
+`CONTEXT.md` or touching anything. Push, register, and submit still
+have their own per-step confirmations later.
+
+**Run in the user's policy directory.** Once the user has said yes,
+confirm the current working directory is their policy project — the
+same one `/setup` and `/wrap-policy` ran in. Look for
+`<project>/.manifold/CONTEXT.md` and `.manifold/<slug>/` (with the
+wrap files inside). If either is missing, stop and ask the user to run
+the earlier skills first.
 
 **Read `.manifold/CONTEXT.md` first.** Setup already recorded the
 package manager, registry, weights location, deployment style, GPU /
