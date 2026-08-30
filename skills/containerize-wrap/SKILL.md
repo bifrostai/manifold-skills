@@ -57,16 +57,16 @@ have their own per-step confirmations later.
 
 **Run in the user's policy directory.** Once the user has said yes,
 confirm the current working directory is their policy project — the
-same one `/setup` and `/wrap-policy` ran in. Look for
+same one `/setup-manifold` and `/wrap-policy` ran in. Look for
 `<project>/.manifold/CONTEXT.md` and `.manifold/<slug>/` (with the
 wrap files inside). If either is missing, stop and ask the user to run
 the earlier skills first.
 
-**Read `.manifold/CONTEXT.md` first.** Setup already recorded the
-package manager, registry, weights location, deployment style, GPU /
-VRAM, and benchmarks of interest; wrap-policy added anything else it
-learned. Read `CONTEXT.md` before asking the user anything; ask only
-about details it does not cover.
+**Read `.manifold/CONTEXT.md` first.** setup-manifold already recorded
+the package manager, registry, weights location, deployment style,
+GPU / VRAM, and benchmarks of interest; wrap-policy added anything
+else it learned. Read `CONTEXT.md` before asking the user anything;
+ask only about details it does not cover.
 
 **Write into `.manifold/<slug>/`.** The `Dockerfile` and `serve.py`
 this skill produces both live under
@@ -117,8 +117,8 @@ declines any of these, stop the skill there — do not skip to the next
 step.**
 
 The **policy name** — the thing that becomes `<slug>` in
-`manifold policy init <slug>` — is **not** on that list. A separate setup
-skill picks it and hands it here. Do not rename the policy on the user's
+`manifold policy init <slug>` — is **not** on that list. setup-manifold
+picks it and hands it here. Do not rename the policy on the user's
 behalf. If the slug is missing, ask the user once for it.
 
 The container image name (registry, namespace, tag) is a
@@ -158,8 +158,8 @@ policy name, and the manifold-sdk version pinned down first.
 it.
 
 **The policy name.** This is the slug used in `manifold policy init
-<slug>`. The setup skill picks it (or the user does directly). If it is
-missing, ask the user once for it. Do not invent one.
+<slug>`. setup-manifold picks it (or the user does directly). If it
+is missing, ask the user once for it. Do not invent one.
 
 **The image name.** Built from the policy slug plus the org's registry
 and namespace, in the shape:
@@ -182,7 +182,7 @@ can silently disagree at run time.
 > ```
 > wrap_module      = ?  (e.g. mywrap.mypolicy_mybench)
 > checks_pass      = yes (link to wrap-policy handoff)
-> policy_slug      = ?  (source: setup skill | user)
+> policy_slug      = ?  (source: setup-manifold | user)
 > image_name       = <registry>/<namespace>/policy-<slug>:<tag>
 >                    (constructed by this skill from the slug)
 > sdk_version      = ?  (from wrap-policy environment)
@@ -578,7 +578,7 @@ OOMs again, repeat with a higher floor — each retry needs a fresh
 user yes. Do not silently keep bumping.
 
 Also update `CONTEXT.md`'s peak-VRAM entry for this policy to the
-value that actually worked, so future runs of setup don't lowball
+value that actually worked, so future runs of setup-manifold don't lowball
 again.
 
 > **Phase 4 checkpoint:**
@@ -615,7 +615,7 @@ again.
 Inputs
 
 - [ ] Wrap passes `check_compatibility` and `verify` under `wrap-policy`
-- [ ] Policy slug received from the setup skill (not invented); image
+- [ ] Policy slug received from setup-manifold (not invented); image
       name constructed from it
 - [ ] manifold-sdk version in the image matches the version the wrap
       was written against

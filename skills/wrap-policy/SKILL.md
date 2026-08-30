@@ -6,7 +6,7 @@ description: >
   prepare a policy for Manifold.
 compatibility: >
   Run this skill from the user's policy project directory, after
-  `/setup` has written `<project>/.manifold/CONTEXT.md`. Everything this
+  `/setup-manifold` has written `<project>/.manifold/CONTEXT.md`. Everything this
   skill writes goes inside `<project>/.manifold/<slug>/`, where `<slug>`
   is the policy name recorded in `CONTEXT.md`.
 ---
@@ -37,22 +37,23 @@ reading `CONTEXT.md` or touching anything.
 
 **Run in the user's policy directory.** Once the user has said yes,
 confirm the current working directory is their policy project — the
-same one `/setup` ran in. Look for `<project>/.manifold/CONTEXT.md` at
-the root; if it does not exist, stop and ask the user to run `/setup`
+same one `/setup-manifold` ran in. Look for `<project>/.manifold/CONTEXT.md` at
+the root; if it does not exist, stop and ask the user to run `/setup-manifold`
 first. If the current directory does not look like their policy project
 (no `pyproject.toml` / `requirements.txt` or similar), ask for the
 correct path.
 
-**Read `.manifold/CONTEXT.md` next.** Setup already interviewed the
-user and recorded everything wrap-policy would otherwise ask —
+**Read `.manifold/CONTEXT.md` next.** setup-manifold already
+interviewed the user and recorded everything wrap-policy would
+otherwise ask —
 package manager, source folders, weights location, GPU / VRAM,
 deployment style, registry, and the policy slug and benchmarks of
 interest. Read that file before asking the user anything else; ask
 only about details `CONTEXT.md` does not already cover.
 
-**Jobs setup delegated to this skill.** Setup wrote `CONTEXT.md` and
-nothing else. Once you've read it, do these before writing any wrap
-code:
+**Jobs setup-manifold delegated to this skill.** setup-manifold wrote
+`CONTEXT.md` and nothing else. Once you've read it, do these before
+writing any wrap code:
 
 - Add `manifold-sdk` to the project's dependency file **and** install it
   into the project's environment. `uv add manifold-sdk` and

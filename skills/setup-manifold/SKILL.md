@@ -1,5 +1,5 @@
 ---
-name: setup
+name: setup-manifold
 description: >
   Use this skill before any other Manifold skill to gather context about the
   user's project. Ask the user for context about their project, policy model,
@@ -27,8 +27,8 @@ policy slug, model source folders, weights location, registry,
 inference requirements, deployment style, benchmarks, and the detected
 package manager.
 
-Setup does not touch the project's dependencies and does not scaffold
-any policy folder. Installing `manifold-sdk` and creating
+setup-manifold does not touch the project's dependencies and does not
+scaffold any policy folder. Installing `manifold-sdk` and creating
 `.manifold/<slug>/` are both `/wrap-policy`'s job — that skill runs
 when there is actually wrap code to write.
 
@@ -76,17 +76,18 @@ out which package manager the project uses and record it in
 `CONTEXT.md`. If it's ambiguous, ask the user. Do not install anything
 yourself, and do not migrate the project to a different manager.
 
-**Do not run this skill without an explicit user invocation.** Setup
-writes into the user's project. If the user has not asked for setup by
-name, stop and wait.
+**Do not run this skill without an explicit user invocation.**
+setup-manifold writes into the user's project. If the user has not
+asked for it by name, stop and wait.
 
 ## What CONTEXT.md is
 
 `.manifold/CONTEXT.md` is the persistent context for every Manifold
 skill that runs on this project. Plain markdown, sections by topic
-(Project, Registry, Deployment, Policies). Setup writes the first
-version; wrap-policy and containerize-wrap read from it before asking
-any question of their own, and can append to it as they learn more.
+(Project, Registry, Deployment, Policies). setup-manifold writes the
+first version; wrap-policy and containerize-wrap read from it before
+asking any question of their own, and can append to it as they learn
+more.
 
 The point is that the user answers each question once. Later skills
 never re-ask what CONTEXT.md already knows.
@@ -220,9 +221,9 @@ better. This file is read by both agents and humans.
 
 ## Ask the user whether to continue
 
-Setup's own work is done. Do not chain into another skill without
-asking the user first. Ask before continuing, and only proceed if the
-user says yes.
+setup-manifold's own work is done. Do not chain into another skill
+without asking the user first. Ask before continuing, and only proceed
+if the user says yes.
 
 Each step in the Manifold flow is a separate skill by design, so the
 user gets to review the previous step's output before agreeing to the
