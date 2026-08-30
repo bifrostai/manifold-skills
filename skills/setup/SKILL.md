@@ -152,10 +152,16 @@ could not answer:
   `ghcr.io/<org>`). Include a default of `ghcr.io` if the user has no
   preference stated.
 - **Benchmarks of interest.** Present the list from Phase 1
-  (`manifold benchmark list`) as options — slug plus one-line
-  description each. The user picks one or more. If none of the
-  listed benchmarks fit, let them name a different one, but flag that
-  it must exist on the platform for a run to succeed.
+  (`manifold benchmark list`) as options for a multi-select — slug
+  plus one-line description each. **Group benchmarks that belong to
+  the same family** — shared slug prefix and/or a shared word in the
+  description usually gives it away — and present the family as a
+  single grouped choice (with the individual suites as multi-select
+  items inside), not as several unrelated one-of-N options. A
+  researcher shipping a policy for a benchmark family usually wants
+  all of its suites. If none of the listed benchmarks fit, let the
+  user name a different one, but flag that it must exist on the
+  platform for a run to succeed.
 
 Skip these unless the user brings them up: display name (defaults to
 the slug), visibility (defaults to `org`).
