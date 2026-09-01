@@ -55,13 +55,21 @@ only about details `CONTEXT.md` does not already cover.
 `CONTEXT.md` and nothing else. Once you've read it, do these before
 writing any wrap code:
 
-- Add `manifold-sdk` to the project's dependency file **and** install it
-  into the project's environment. `uv add manifold-sdk` and
-  `poetry add manifold-sdk` do both in one command. With plain
-  `requirements.txt`, do both steps: append `manifold-sdk` to the file
-  and run `pip install manifold-sdk`. Recording without installing (or
-  the reverse) leaves the project half-set-up. If the install fails on
-  a dependency conflict, stop and hand the error to the user.
+- Add `manifold-sdk` to the project's dependency file **and** install
+  it into the project's environment, from the GitHub source. With uv,
+  one command does both:
+
+  ```
+  uv add "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git"
+  ```
+
+  With plain `requirements.txt`, do both steps: append the line
+  `manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git` to
+  the file, then run
+  `pip install "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git"`.
+  Recording without installing (or the reverse) leaves the project
+  half-set-up. If the install fails on a dependency conflict, stop and
+  hand the error to the user.
 - Create the folder `<project>/.manifold/<slug>/` — the slug is in
   `CONTEXT.md`. All wrap files below live inside it.
 
