@@ -31,10 +31,11 @@ The interview asks first where the model runs, then branches to the
 follow-up questions that fit that answer. Two possible answers:
 
 - **Manifold loads and runs the model.** The user gives Manifold
-  the checkpoint (weights on disk, or a hub id). Each run loads
-  the checkpoint into GPU memory on Manifold's machines.
+  the model weights (as a file on disk, or a reference to a hosted
+  model). Each run loads the weights into GPU memory on Manifold's
+  machines.
   Next skill: `/wrap-policy`, then `/containerize-wrap`.
-- **The model already runs on the user's own server; Manifold
+- **The model already runs on the user's own server. Manifold
   calls it.** The user keeps an inference server up somewhere
   (Modal endpoint, private HTTPS box). Manifold sends observations
   to it over the network and reads back the actions. No GPU is
@@ -68,6 +69,15 @@ questions, providing options where the answer is a small set. In other
 harnesses use the equivalent structured-question tool if one exists.
 Fall back to plain-chat questions (numbered list) only if no structured
 tool is available.
+
+**Ask in the user's language.** The user has not read the SDK docs
+and will not recognize its terms. Present each concept by the
+outcome it describes, not by its acronym or config field name. Ask
+"how much GPU memory does the model need at inference?" rather
+than "what is your peak VRAM in GB?". Ask "where can Manifold
+reach the model?" rather than "what is the deployment style?". If
+the user uses a term themselves, follow their lead. Otherwise stay
+with plain language.
 
 **Use judgment. Ask about what is hard to know; look up what is easy.**
 Do the cheap, reliable lookups yourself. For example, `nvidia-smi` for
@@ -164,9 +174,10 @@ of which branch is chosen.
 
 - **Where does the model run when Manifold uses it?** Options:
   - **Manifold loads and runs it.** The user gives Manifold the
-    checkpoint (weights on disk, or a hub id); Manifold loads it
-    into GPU memory on their machines each run.
-  - **The user already runs it on their own server; Manifold calls
+    model weights (as a file on disk, or a reference to a hosted
+    model). Manifold loads them into GPU memory on their machines
+    each run.
+  - **The user already runs it on their own server. Manifold calls
     it.** The user has an inference server up somewhere (a Modal
     endpoint, a private HTTPS box). Manifold sends observations to
     it over HTTPS and reads back the actions.
@@ -176,12 +187,16 @@ of which branch is chosen.
   word "container" unless the user has already used it. The answer
   picks the branch for Round 2 and the recommended next skill in
   the handoff.
-- **Policy name.** What to call this policy on Manifold. Becomes the
-  `<slug>` in `manifold policy init <slug>`. The user names it; do not
-  suggest one.
-- **Container registry destination.** URL plus namespace (for example
-  `ghcr.io/<org>`). Include a default of `ghcr.io` if the user has no
-  preference stated.
+- **Policy name.** What to call this policy on Manifold. The name
+  becomes the identifier used in the register command later. The
+  user names it. Do not suggest one.
+- **Where to push the container image.** Manifold packages the
+  policy into a container image (a self-contained bundle that runs
+  the same way on any machine) and pushes it to a storage service
+  like ghcr.io or Docker Hub. Ask for the service URL and the
+  account or organization the image goes under. For example
+  `ghcr.io/<org>`. Default to `ghcr.io` if the user has no
+  preference.
 - **Benchmarks of interest.** Present the list from Phase 1
   (`manifold benchmark list`) as options for a multi-select: slug
   plus one-line description each. **Group benchmarks that belong to
@@ -201,11 +216,13 @@ the slug), visibility (defaults to `org`).
 
 Ask these only if the user picked "Manifold loads and runs it":
 
-- **Peak VRAM at inference, in GB.** The user knows this from their
-  own runs; the agent cannot measure it without running the model.
-- **Where the weights live.** If Phase 1 found candidate folders,
-  present them as options plus "elsewhere / hub / cloud storage." The
-  user picks or fills in the actual path or ref.
+- **How much GPU memory does the model use at inference, in GB?**
+  The user knows this from their own runs. The agent cannot
+  measure it without running the model.
+- **Where the model weights live.** If Phase 1 found candidate
+  folders, present them as options plus "elsewhere" (a hosted
+  model reference, cloud storage, or a path the user will type in).
+  The user picks or fills in the actual location.
 - **Where the user typically deploys this container.** Options: local
   box, Modal (as compute), other cloud, none-yet.
   This does not change what the container looks like; it is context
@@ -218,24 +235,26 @@ Ask these only if the user picked "the user's own server":
 - **Endpoint URL.** The base URL the container will dial (for example
   `https://<user>--<app>.modal.run`). The user has this from wherever
   they deployed the server.
-- **Auth situation.** How the endpoint is secured. Options:
-  - **Open.** No credential required. Anyone with the URL can hit it.
-  - **Network restricted.** The endpoint is behind an IP allowlist,
-    VPC, or similar. The user will need to add the Manifold runner's
-    egress addresses.
-  - **Requires a header token.** A bearer token or API key must ride
-    each request. Flag this to the user: the Manifold platform does
-    not currently give the container a secret store, so a header
-    token cannot be delivered safely at run time. The workaround is
-    to make the endpoint network-restricted for now, and drop the
-    token, until a runner-side secret channel exists.
-- **Wire contract summary.** One or two sentences from the user or
-  their handoff: what the description route is called (for example
-  `GET /config`), what the inference route is called (for example
-  `POST /infer`), and what the wire encoding is (JSON, msgpack, a
-  custom variant). The full contract is Phase 1 work for the wrap
-  skill; this is just enough to record which server the wrap will
-  target.
+- **How is the endpoint secured?** Options:
+  - **No security.** Anyone with the URL can call it.
+  - **Restricted by network.** Only certain machines can reach the
+    URL, controlled by an allowlist of IP addresses or a private
+    network. The user will need to allow the addresses Manifold's
+    runners use.
+  - **Requires an API key or token in each request.** Flag this to
+    the user. Manifold does not currently have a safe place to
+    store that token, so the container cannot send it. The
+    workaround for now is to switch to "restricted by network"
+    instead. This will change when Manifold adds a way to pass
+    secrets to the container.
+- **Request and response format.** A one or two sentence summary
+  from the user or their setup notes. What HTTP route describes
+  the loaded checkpoint (for example `GET /config`), what HTTP
+  route accepts an observation (for example `POST /infer`), and
+  what data format the request and response bodies use (JSON,
+  msgpack, a custom variant). The full details are Phase 1 work
+  for the wrap skill. This is just enough to record which server
+  the wrap will target.
 
 > **Phase 2 checkpoint (both branches):**
 > ```
@@ -277,7 +296,8 @@ Common sections (both branches):
 - `# Manifold context for this project`
 - `## Project`. Package manager, the dependency file it uses, Python
   version, source folders, ML framework.
-- `## Registry`. URL, namespace.
+- `## Registry`. The service URL and the account or organization
+  the image goes under.
 
 Runtime and Policies sections depend on the branch.
 
@@ -285,20 +305,21 @@ Runtime and Policies sections depend on the branch.
 
 - `## Runtime`. GPU / CUDA / Docker facts you detected, plus how the
   user typically deploys this container.
-- `## Policies`. One `### <slug>` per policy, with display name,
-  visibility, peak VRAM, benchmarks paired with, and a **Weights**
-  paragraph (location and any auth notes).
+- `## Policies`. One `### <policy-name>` per policy, with display
+  name, visibility, GPU memory needed, benchmarks paired with, and
+  a **Weights** paragraph (location and any auth notes).
 
 ### Branch B: hosted endpoint
 
 - `## Runtime`. State that the built container does not load the
-  model; it dials the user's inference server. Docker facts you
+  model. It calls the user's inference server. Docker facts you
   detected still go here (the container is still built and pushed).
   Note that no GPU is needed on the build machine or on the runner.
-- `## Policies`. One `### <slug>` per policy, with display name,
-  visibility, benchmarks paired with, and an **Endpoint** paragraph.
-  The Endpoint paragraph records the URL, the auth situation, and the
-  wire contract summary. No Weights paragraph in this branch.
+- `## Policies`. One `### <policy-name>` per policy, with display
+  name, visibility, benchmarks paired with, and an **Endpoint**
+  paragraph. The Endpoint paragraph records the URL, how the
+  endpoint is secured, and the one-line summary of the request and
+  response format. No Weights paragraph in this branch.
 
 Add new sections when something is worth recording that doesn't fit
 above. For example, a `## Cloud storage` section if the weights live

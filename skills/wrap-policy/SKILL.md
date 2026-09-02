@@ -15,16 +15,25 @@ compatibility: >
 
 ## Summary
 
-Use the manifold-sdk to wrap one policy so a Manifold benchmark can drive it.
-The output of this process is a complete folder containing Python files:
-a driver, a profile, and a pairing.
+Use the manifold-sdk to write the files that let a Manifold benchmark
+run the user's policy. The output is a folder of Python files. Three
+kinds of file, each with its own role. The skill uses these three
+words as labels for the files throughout:
+
+- The **driver** loads the model and runs it.
+- The **profile** describes what the model expects as input and returns
+  as output.
+- The **pairing** ties one driver-plus-profile to one benchmark. There
+  is one pairing file per benchmark the user wants to run against.
+
+Together these files are called the **wrap**.
 
 This skill is for the case where the model loads into the built
 container. If the model runs on the user's own inference server (Modal
 endpoint, private HTTPS box), use `/wrap-remote-policy` instead.
 
-All conversions and transformations must be done on this policy wrap. The
-benchmark side is fixed.
+All conversions and transformations happen in the wrap. The benchmark
+side is fixed.
 
 Your task is complete when both `check_compatibility` and `verify` pass AND
 the wrap runs cleanly under `evaluate`. The two checks pass specs and dummy
@@ -40,6 +49,22 @@ adding `manifold-sdk` to the project's deps and creating files under
 `<project>/.manifold/`, both so the wrap can run in their own
 environment against their own model code. Wait for a yes before
 reading `CONTEXT.md` or touching anything.
+
+**Speak to the user in their language, not the SDK's.** The user has
+not read the SDK docs. They will not recognize class names, method
+names, config fields, or enum values. The skill below names those
+identifiers freely because you need them to write correct code.
+When narrating progress to the user, translate.
+
+Say things like:
+- "I'll write the files that let the benchmark run your policy."
+- "The wrap passes the SDK's compatibility check."
+- "The test run finished without errors."
+- "Some parts of the wrap were not tested by the check."
+
+Not the identifiers from the code blocks below. If the user uses
+one of those terms themselves, follow their lead. Otherwise,
+describe what happened and why it matters.
 
 **Run in the user's policy directory.** Once the user has said yes,
 confirm the current working directory is their policy project: the
@@ -230,14 +255,17 @@ is a decision, not implementation.
 layouts, and so on). The pairing file creates one and fills those fields with
 real values.
 
-### PolicySignature
+### The signature: what the model emits and consumes
 
-**`PolicySignature`** declares the action space the model emits and the
-observation it consumes.
+The pairing file declares a signature. This is a description of the
+action space the model emits and the observation it consumes. In
+code it is a `PolicySignature`.
 
-**Stop if the action is not `EEActionSpace`, `JointActionSpace`, or
-`UnifiedActionSpace(payload=...)`**, or if its state is not `ee_pose` or
-`joint_pos`. Anything else is benchmark work, not a wrap.
+**Stop if the action is not end-effector, joint, or a unified
+variant** (in code: `EEActionSpace`, `JointActionSpace`, or
+`UnifiedActionSpace(payload=...)`). Same if the state is not
+end-effector pose or joint position (`ee_pose` or `joint_pos`).
+Anything else is benchmark work, not a wrap.
 
 - Report real-world units. Meters, radians, gripper state. If your model outputs
   normalized values, convert them in the driver before returning.
@@ -257,14 +285,17 @@ observation it consumes.
 Spell out every convention field (`rotation=`, `gripper=`, `delta=`, `frame=`)
 from the project's eval. Do not copy the benchmark's action object.
 
-### NativeLayout
+### The layout: benchmark observation to model input, model output to action
 
-Your wrap will receive an `Observation` object and `NativeLayout` helps translate
-that to the underlying policy class's expected input, usually a dictionary.
+The benchmark hands the wrap an observation object. The model
+expects a dictionary. A layout describes how each dictionary key
+gets filled from the observation, and how the model's output is
+sliced back into an action. In code these are two `NativeLayout`
+instances.
 
-`input_layout` maps `Observation` channels to the dictionary's keys.
-`output_layout` maps raw output back to an action. Key renames are entries with
-no ops.
+The input layout maps observation channels to dictionary keys. The
+output layout maps raw model output back to an action. Key renames
+are entries with no ops.
 
 - **Plain `(chunk, dim)` output**: use
   `LayoutEntry(key=..., source=SourceKind.STATE, source_name=None,
@@ -276,15 +307,20 @@ no ops.
 - **Instruction entry**: use `SourceKind.INSTRUCTION`. Every step, the current
   task's instruction is sent to the policy. Do not cache it on the policy.
 
-### Profile
+### The profile: the wrap's spec
 
-Frozen dataclass satisfying `recipes.PolicyProfile`: fields `signature`,
-`default_weights`, `input_layout`, `output_layout`, `chunk`, `exec_steps`,
-plus a `load(weights, device) -> PolicyEndpoint` method.
+The profile is a small object that carries the signature, the input
+and output layouts, the weights location, and two chunk-related
+numbers. It also has a `load()` method that opens the model. In
+code it is a frozen dataclass satisfying `recipes.PolicyProfile`,
+with fields `signature`, `default_weights`, `input_layout`,
+`output_layout`, `chunk`, `exec_steps`, and a
+`load(weights, device) -> PolicyEndpoint` method.
 
-Defer the driver import into `load()` so `profile.py` imports without the
-model stack. Take `device` as a `load()` parameter. Checkpoints bake in the
-training device, and the caller passes the runtime one at load time.
+Defer the driver import into `load()` so `profile.py` imports without
+the model stack. Take `device` as a `load()` parameter. Checkpoints
+bake in the training device, and the caller passes the runtime one at
+load time.
 
 - **`chunk`/`exec_steps` have no check.** Missing `exec_steps` by exact name
   fails at the first step in `advance`. Missing `.profile` on the endpoint
@@ -407,18 +443,20 @@ The benchmark's data won't match what your model expects. Something has to
 convert between them: resize a camera, change a rotation format, normalize a
 state vector, and so on.
 
-The SDK gives you three places to put those conversions. It's a
-safety-vs-flexibility ladder: higher up, the SDK can check what you did; lower
-down, you can do anything but nothing is checked.
+The SDK gives you three places to put those conversions. They trade
+off how much the SDK can check for how much freedom you have. Higher
+on the list below, the SDK can check what you did. Lower on the
+list, you can do anything but the SDK cannot check it.
 
 - **Pipeline adapters**. For reusable typed conversions. Built-in adapters
   cover rotation format, gripper polarity, camera resize/flip/channel-order,
   frame rebase, and frame history. `check_compatibility` inspects the chain
   and validates it.
-- **NativeLayout entries**. For structural plumbing: renaming keys, casting
-  to `float32`, slicing arrays, splitting one vector into two. Not typed, so
-  `check_compatibility` can't reason about them, but `verify` pushes data
-  through and confirms the shapes come out right.
+- **NativeLayout entries**. For building the input dictionary the
+  model reads: renaming keys, casting to `float32`, slicing arrays,
+  splitting one vector into two. Not typed, so `check_compatibility`
+  cannot reason about them, but `verify` pushes data through and
+  confirms the shapes come out right.
 - **Driver session code**. For per-model idiosyncrasies the SDK has no
   adapter for: normalization stats baked into a specific checkpoint,
   transposing image axes to `(C, H, W)` for torchvision, computing a gripper
@@ -464,11 +502,12 @@ checkpoint, stop.
 **No loose convention math in the driver.** Use catalog adapters or write a
 custom adapter (see the `manifold.core.adapter` protocol).
 
-**Replicate the project's action postprocessing end to end.** Read every line;
-helpers routinely scale, then negate, then clip.
+**Replicate every step of the project's action postprocessing.** Read
+every line. Helpers routinely scale, then negate, then clip.
 
-**Prove each conversion is needed.** Three-extremes test (low, middle, high).
-If values already match, add no adapter.
+**Prove each conversion is needed.** Sample the model's output at low,
+middle, and high inputs and compare to what the benchmark expects.
+If they already match, add no adapter.
 
 **Wire every input the signature consumes.** Zeros for a trained state input
 scores zero silently.
@@ -583,19 +622,20 @@ first observation; `step(action)` applies an action and returns
 stand-in for the benchmark's real physics. Use the catalog `Benchmark` for
 shapes and write the simplest possible step logic (integrating action deltas
 into a pose, rendering a frame that changes each step). The run scores
-nothing; it exists to prove the driver code runs end to end.
+nothing. It exists to prove the driver runs a full episode without
+raising an exception.
 
-**How to describe this run to the user.** Call it a "smoke test with
-dummy inputs" or "an end-to-end sanity check that the driver runs
-cleanly." Do NOT say you are "faking the physics" or "using fake
-data." Those phrases are correct SDK jargon but read as
-untrustworthy to a non-engineer.
+**How to describe this run to the user.** Call it "a test run with
+dummy inputs to check that the driver runs without errors." Do NOT
+say you are "faking the physics" or "using fake data." Those
+phrases are correct SDK jargon but read as untrustworthy to a
+non-engineer.
 
 **Do not treat episode-to-episode differences as a wrap bug.** With
-hand-written `reset`/`step`, the two episodes will not exactly
+hand-written `reset` and `step`, the two episodes will not exactly
 reproduce each other unless the stand-in is deterministic. That is
-expected. The check the live run answers is: "does the driver run
-end to end without raising?" That is all. If both episodes finish
+expected. The live run only tests one thing. Did the driver run
+without raising an exception? If both episodes finish
 without an exception, proceed to the handoff. Do not go back and
 edit the wrap to make the episodes match.
 

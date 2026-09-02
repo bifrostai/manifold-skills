@@ -74,6 +74,24 @@ run their driver against benchmarks. Wait for a yes before reading
 `CONTEXT.md` or touching anything. Push, register, and submit still
 have their own per-step confirmations later.
 
+**Speak to the user in their language, not the SDK's.** The user has
+not read the SDK docs. They will not recognize Docker fields,
+registry commands, or the names of Manifold's tools and config
+fields. The skill below names those identifiers freely because you
+need them to write correct code. When narrating progress to the
+user, translate.
+
+Say things like:
+- "I'll build the image that dials your server."
+- "The image built and pushed to your registry."
+- "Registered on Manifold with your endpoint URL attached to the
+  version's config."
+- "The scored test run finished. The score is X."
+
+Not the identifiers from the Dockerfile snippets or tool calls
+below. If the user uses one of those terms themselves, follow
+their lead. Otherwise, describe what happened and why it matters.
+
 **Run in the user's policy directory.** Once the user has said yes,
 confirm the current working directory is their policy project. The
 same one `/setup-manifold` and `/wrap-remote-policy` ran in. Look for
@@ -171,11 +189,12 @@ Consequences for the remote case:
    the container. The driver reads the endpoint URL from one of
    those vars (for example `MY_SERVER_URL`), and any tunable
    overrides the profile exposes.
-4. **Nothing local proves the image works end to end.** A clean
-   local `docker run` shows that the driver dials the endpoint and
-   the server accepts connections on 8000. Whether the platform can
-   pull, schedule, drive, and score the image is only settled by an
-   actual scored run, which is up to the user to submit.
+4. **Nothing local proves the image works in production conditions.**
+   A clean local `docker run` shows that the driver reaches the
+   endpoint and the server accepts connections on 8000. Whether the
+   platform can pull, schedule, drive, and score the image is only
+   settled by an actual scored run, which is up to the user to
+   submit.
 
 ---
 

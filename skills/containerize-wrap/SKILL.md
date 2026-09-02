@@ -61,6 +61,22 @@ run their policy against benchmarks. Wait for a yes before reading
 `CONTEXT.md` or touching anything. Push, register, and submit still
 have their own per-step confirmations later.
 
+**Speak to the user in their language, not the SDK's.** The user has
+not read the SDK docs. They will not recognize Docker fields,
+registry commands, or CLI flag names. The skill below names those
+identifiers freely because you need them to write correct code.
+When narrating progress to the user, translate.
+
+Say things like:
+- "I'll build the image that contains your policy."
+- "The image built and pushed to your registry."
+- "Registered on Manifold as version 0.1.0."
+- "The scored test run finished. The score is X."
+
+Not the identifiers from the Dockerfile snippets or CLI examples
+below. If the user uses one of those terms themselves, follow
+their lead. Otherwise, describe what happened and why it matters.
+
 **Run in the user's policy directory.** Once the user has said yes,
 confirm the current working directory is their policy project. The
 same one `/setup-manifold` and `/wrap-policy` ran in. Look for
@@ -151,10 +167,11 @@ Three consequences follow:
 2. **Tags become versions.** `manifold policy init` reads the image tag and
    uses it as the version string. Never reuse a tag; old tags are
    immutable.
-3. **Nothing local proves the image works end to end.** A clean local
-   `docker run` only shows that the server starts. Whether the platform
-   can pull, schedule, drive, and score the image is only settled by an
-   actual scored run, which is up to the user to submit.
+3. **Nothing local proves the image works in production conditions.**
+   A clean local `docker run` only shows that the server starts.
+   Whether the platform can pull, schedule, drive, and score the image
+   is only settled by an actual scored run, which is up to the user to
+   submit.
 
 ---
 

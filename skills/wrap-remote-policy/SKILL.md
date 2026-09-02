@@ -16,16 +16,24 @@ compatibility: >
 
 ## Summary
 
-Use the manifold-sdk to wrap one policy. The model runs on the
-user's own inference server; the wrap dials it. The output is a
-folder of Python files: a driver that dials the server, a profile,
-and a pairing per benchmark.
+Use the manifold-sdk to write the files that let a Manifold benchmark
+call the user's own inference server. The output is a folder of
+Python files. Three kinds of file, each with its own role. The skill
+uses these three words as labels for the files throughout:
+
+- The **driver** makes the HTTP calls to the user's server.
+- The **profile** describes what the server expects as input and
+  returns as output.
+- The **pairing** ties one driver-plus-profile to one benchmark. There
+  is one pairing file per benchmark the user wants to run against.
+
+Together these files are called the **wrap**.
 
 All conversions between what the benchmark publishes and what the
-server consumes happen in this wrap. The benchmark side is fixed. The
-server side is fixed too: this skill does not change what routes the
-server exposes or the shape of its request and response bodies, only
-how the driver talks to them.
+server accepts happen in the wrap. The benchmark side is fixed. The
+server side is fixed too. This skill does not change what routes the
+server exposes or the shape of its request and response bodies. It
+only changes how the driver talks to them.
 
 Your task is complete when `check_compatibility` and `verify` both
 pass AND the driver reaches the endpoint and answers one full episode
@@ -46,6 +54,22 @@ adding `manifold-sdk` and an HTTP client (`httpx`) to the project's
 deps, creating files under `<project>/.manifold/`, and writing code
 that will dial their inference server at run time. Wait for a yes
 before reading `CONTEXT.md` or touching anything.
+
+**Speak to the user in their language, not the SDK's.** The user has
+not read the SDK docs. They will not recognize class names, method
+names, config fields, enum values, or HTTP route paths. The skill
+below names those identifiers freely because you need them to write
+correct code. When narrating progress to the user, translate.
+
+Say things like:
+- "I'll write the files that let the benchmark call your server."
+- "The wrap passes the SDK's compatibility check."
+- "The driver reached your server and finished the test run."
+- "Some parts of the wrap were not tested by the check."
+
+Not the identifiers from the code blocks below. If the user uses
+one of those terms themselves, follow their lead. Otherwise,
+describe what happened and why it matters.
 
 **Run in the user's policy directory.** Once the user has said yes,
 confirm the current working directory is their policy project: the
@@ -240,15 +264,17 @@ Everything here is a decision, not implementation.
 conventions, env overrides). The pairing file creates one and fills
 those fields with real values.
 
-### PolicySignature
+### The signature: what the driver emits and consumes
 
-Same rules as any wrap. Declares the action space the driver emits
-and the observation the driver consumes.
+The pairing file declares a signature. This is a description of the
+action space the driver returns and the observation it consumes.
+Same rules as any wrap. In code it is a `PolicySignature`.
 
-**Stop if the action is not `EEActionSpace`, `JointActionSpace`, or
-`UnifiedActionSpace(payload=...)`**, or if its state is not
-`ee_pose` or `joint_pos`. Anything else is benchmark work, not a
-wrap.
+**Stop if the action is not end-effector, joint, or a unified
+variant** (in code: `EEActionSpace`, `JointActionSpace`, or
+`UnifiedActionSpace(payload=...)`). Same if the state is not
+end-effector pose or joint position (`ee_pose` or `joint_pos`).
+Anything else is benchmark work, not a wrap.
 
 - Report real-world units. Meters, radians, gripper state. If the
   server emits normalized values, convert them in the driver before
@@ -265,14 +291,16 @@ wrap.
   `delta=`, `frame=`) from the server's contract. Do not copy the
   benchmark's action object.
 
-### NativeLayout
+### The layout: benchmark observation to driver input, driver output to action
 
-The driver receives an `Observation` object and `NativeLayout` helps
-translate it into the dictionary the driver's session code reads
-before packing the wire request.
+The benchmark hands the driver an observation object. The driver's
+session code reads a dictionary. A layout describes how each
+dictionary key gets filled from the observation, and how the
+driver's returned dictionary is sliced back into an action. In code
+these are two `NativeLayout` instances.
 
-- `input_layout` maps `Observation` channels to the dictionary's keys.
-- `output_layout` maps the driver's returned dictionary back to an
+- The input layout maps observation channels to dictionary keys.
+- The output layout maps the driver's returned dictionary back to an
   action.
 
 Same layout entry rules as any wrap. `Slice` takes keyword args only
@@ -290,26 +318,31 @@ an identity window.
 current task's instruction is passed to the driver. Do not cache it
 on the endpoint.
 
-### Profile
+### The profile: the wrap's spec
 
-Frozen dataclass. Fields:
+The profile carries the signature, the input and output layouts,
+the request and response constants the driver needs at run time,
+and a `load()` method that opens a connection to the server. In
+code it is a frozen dataclass with these fields:
 
 - `signature: PolicySignature`
-- `default_weights: str` (set to `""`; the server holds the
-  checkpoint)
+- `default_weights: str` (set to `""`. The server holds the
+  checkpoint.)
 - `input_layout: NativeLayout`
 - `output_layout: NativeLayout`
-- Wire convention fields: any constants the driver needs at run time.
-  For example: `scene_intrinsics`, `wrist_intrinsics`, `depth_scale_*`,
-  `action_steps` (poses used per reply), `chunk_stride`, `max_pos_delta_m`,
-  `max_rot_delta_rad`, `gripper_open_span`, `gripper_closed`,
-  `timeout_s`.
+- Request and response constants. Any values the driver needs when
+  building requests or interpreting responses. For example:
+  `scene_intrinsics`, `wrist_intrinsics`, `depth_scale_*`,
+  `action_steps` (poses used per reply), `chunk_stride`,
+  `max_pos_delta_m`, `max_rot_delta_rad`, `gripper_open_span`,
+  `gripper_closed`, `timeout_s`.
 - A `load(weights, device) -> Endpoint` method.
 
 `load()` ignores both `weights` and `device`. It reads the endpoint
 URL from an environment variable (for example `NT_SERVER_URL`) and
-dials the server. Both `load()` arguments exist to match the
-`PolicyProfile` protocol; they select nothing for a remote wrap.
+opens a connection to the server. Both `load()` arguments exist to
+match the `PolicyProfile` protocol. They select nothing for a
+remote wrap.
 
 **Env-tunable knobs.** Some profile fields should be adjustable
 without an image rebuild. Timeout, action steps per reply, chunk
@@ -526,7 +559,8 @@ has to convert between them. Three places to put those conversions:
   resize/flip/channel-order, frame rebase, frame history, camera
   pose exposure. `check_compatibility` inspects the chain and
   validates it.
-- **NativeLayout entries** for structural plumbing: renaming keys,
+- **NativeLayout entries** for building the input dictionary the
+  driver reads: renaming keys,
   casting dtypes, slicing arrays. Not typed, so `check_compatibility`
   can't reason about them, but `verify` pushes data through and
   confirms the shapes come out right.
@@ -701,25 +735,25 @@ real request against the real endpoint. Two ways to do it:
   user is on a build box without egress). Build a stub
   `SessionEndpoint` (see "Testable session" above), plug it into
   `MyEndpoint` for the duration of the test, and run `evaluate`
-  against it. This proves the wrap's plumbing but not the wire
-  format against the real server. Note that in the handoff and make
-  the first real proof a scored run under
+  against it. This exercises the wrap's Python code. It does not
+  test the wire format against the real server. Note that in the
+  handoff. Make the first real proof a scored run under
   `/containerize-remote-wrap`.
 
-**How to describe this run to the user.** Call it a "smoke test that
-the driver dials the endpoint end to end" or "an end-to-end sanity
-check that the wrap runs cleanly." Do NOT say you are "faking the
-physics" or "using fake data." Those phrases are correct SDK jargon
-but read as untrustworthy to a non-engineer.
+**How to describe this run to the user.** Call it "a test run to
+check that the driver reaches your server and finishes without
+errors." Do NOT say you are "faking the physics" or "using fake
+data." Those phrases are correct SDK jargon but read as
+untrustworthy to a non-engineer.
 
 **Do not treat episode-to-episode differences as a wrap bug.** With
-hand-written `reset`/`step` (or a stub `SessionEndpoint`), the two
-episodes will not exactly reproduce each other unless the stand-in
-is deterministic. That is expected. The check the live run answers
-is: "does the driver dial the endpoint and answer without raising?"
-That is all. If both episodes finish without an exception, proceed
-to the handoff. Do not go back and edit the wrap to make the
-episodes match.
+hand-written `reset` and `step` (or a stub `SessionEndpoint`), the
+two episodes will not exactly reproduce each other unless the
+stand-in is deterministic. That is expected. The live run only
+tests one thing. Did the driver reach the server and answer
+without raising an exception? If both episodes finish
+without an exception, proceed to the handoff. Do not go back and
+edit the wrap to make the episodes match.
 
 > **Phase 3 checkpoint:**
 > ```
