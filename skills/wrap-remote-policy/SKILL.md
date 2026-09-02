@@ -5,7 +5,7 @@ description: >
   endpoint, private HTTPS box) for the Manifold
   platform. Write a driver that dials that server, plus the profile and
   pairing that pass check_compatibility and verify. Use when the model
-  does not load in our container.
+  does not load in the built container.
 compatibility: >
   Run from the user's policy project directory, after `/setup-manifold`
   has written `<project>/.manifold/CONTEXT.md` with `model_runtime =
@@ -17,7 +17,7 @@ compatibility: >
 ## Summary
 
 Use the manifold-sdk to wrap one policy. The model runs on the
-user's own inference server; our wrap dials it. The output is a
+user's own inference server; the wrap dials it. The output is a
 folder of Python files: a driver that dials the server, a profile,
 and a pairing per benchmark.
 
@@ -25,7 +25,7 @@ All conversions between what the benchmark publishes and what the
 server consumes happen in this wrap. The benchmark side is fixed. The
 server side is fixed too: this skill does not change what routes the
 server exposes or the shape of its request and response bodies, only
-how our driver talks to them.
+how the driver talks to them.
 
 Your task is complete when `check_compatibility` and `verify` both
 pass AND the driver reaches the endpoint and answers one full episode
@@ -117,7 +117,7 @@ All wrap files live under `<project>/.manifold/<slug>/`, where
 
 - `driver.py` holds the HTTP client for the server, and the endpoint
   and session classes that use it.
-- `profile.py` is a lightweight spec describing what our driver sends
+- `profile.py` is a lightweight spec describing what the driver sends
   to the server and what shape it expects back (wire encoding,
   timeouts, action scaling, gripper convention).
 - `<benchmark>.py` is the pairing file. It builds the signature and
@@ -167,9 +167,9 @@ encoder often takes 30 to 60 seconds on the first task).
 **Note whether requests are self-contained.** If the inference route
 answers each request from its own payload alone, without server-side
 session state between requests, any replica can answer any request
-and our container needs no instance pinning. If the server carries
+and the container needs no instance pinning. If the server carries
 per-connection state (a warm KV cache tied to a session id, per-episode
-memory), our container must pin one session to one server instance.
+memory), the container must pin one session to one server instance.
 
 **Note the auth situation** from `CONTEXT.md` and the server itself.
 Header token, mutual TLS, or none. If a header token is required, the

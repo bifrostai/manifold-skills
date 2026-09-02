@@ -3,7 +3,7 @@ name: wrap-policy
 description: >
   Wrap a researcher's policy for the Manifold platform, then prove it with
   check_compatibility, verify, and a live run of the driver. Use when the
-  model loads into the container we build. For policies where the model
+  model loads into the built container. For policies where the model
   runs on the user's own inference server (Modal, private HTTPS box),
   use `/wrap-remote-policy` instead.
 compatibility: >
@@ -19,8 +19,8 @@ Use the manifold-sdk to wrap one policy so a Manifold benchmark can drive it.
 The output of this process is a complete folder containing Python files:
 a driver, a profile, and a pairing.
 
-This skill is for the case where the model loads into the container we
-build. If the model runs on the user's own inference server (Modal
+This skill is for the case where the model loads into the built
+container. If the model runs on the user's own inference server (Modal
 endpoint, private HTTPS box), use `/wrap-remote-policy` instead.
 
 All conversions and transformations must be done on this policy wrap. The

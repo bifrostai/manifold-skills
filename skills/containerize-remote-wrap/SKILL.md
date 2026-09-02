@@ -5,7 +5,7 @@ description: >
   Manifold platform, push it to a container registry, register it with
   the endpoint URL in its config env, and offer a scored test run. Use
   after `/wrap-remote-policy`, when the model runs on the user's own
-  inference server and our container only dials it.
+  inference server and the container only dials it.
 compatibility: >
   Run from the user's policy project directory, after
   `/wrap-remote-policy` has written the wrap files under
@@ -168,7 +168,7 @@ Consequences for the remote case:
    immutable.
 3. **The runner injects `config.env` at container start.** The env
    map from the registered version becomes environment variables in
-   the container. Our driver reads the endpoint URL from one of
+   the container. The driver reads the endpoint URL from one of
    those vars (for example `MY_SERVER_URL`), and any tunable
    overrides the profile exposes.
 4. **Nothing local proves the image works end to end.** A clean

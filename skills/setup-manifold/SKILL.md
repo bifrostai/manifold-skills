@@ -30,7 +30,7 @@ manager, plus a set of fields that changes with the model runtime.
 The interview asks first where the model runs, then branches to the
 follow-up questions that fit that answer. Two possible answers:
 
-- **In the container we build.** The container loads the checkpoint
+- **In the built container.** The container loads the checkpoint
   itself. Needs GPU, VRAM, weights on disk or in a hub.
   Next skill: `/wrap-policy`, then `/containerize-wrap`.
 - **On the user's own inference server.** The container dials the
@@ -161,10 +161,10 @@ Ask these together, in one prompt to the user. They apply regardless
 of which branch is chosen.
 
 - **Model runtime.** Where does the model run? Options:
-  - **In the container we build.** The container we build will load
-    the checkpoint on start and keep it in GPU memory.
-  - **On the user's own inference server.** The container we build
-    will dial the server over HTTPS and forward observations to it.
+  - **In the built container.** The container will load the
+    checkpoint on start and keep it in GPU memory.
+  - **On the user's own inference server.** The built container will
+    dial the server over HTTPS and forward observations to it.
     Modal endpoints and private HTTPS boxes both fit here.
 
   This answer picks the branch for Round 2 and the recommended next
@@ -192,7 +192,7 @@ the slug), visibility (defaults to `org`).
 
 ### Round 2, branch A: in-container model
 
-Ask these only if Round 1 answered "in the container we build":
+Ask these only if Round 1 answered "in the built container":
 
 - **Peak VRAM at inference, in GB.** The user knows this from their
   own runs; the agent cannot measure it without running the model.
@@ -209,7 +209,7 @@ Ask these only if Round 1 answered "in the container we build":
 Ask these only if Round 1 answered "on the user's own inference
 server":
 
-- **Endpoint URL.** The base URL our container will dial (for example
+- **Endpoint URL.** The base URL the container will dial (for example
   `https://<user>--<app>.modal.run`). The user has this from wherever
   they deployed the server.
 - **Auth situation.** How the endpoint is secured. Options:
@@ -228,7 +228,8 @@ server":
   `GET /config`), what the inference route is called (for example
   `POST /infer`), and what the wire encoding is (JSON, msgpack, a
   custom variant). The full contract is Phase 1 work for the wrap
-  skill; this is just enough to record which server we are talking to.
+  skill; this is just enough to record which server the wrap will
+  target.
 
 > **Phase 2 checkpoint (both branches):**
 > ```
@@ -284,7 +285,7 @@ Runtime and Policies sections depend on the branch.
 
 ### Branch B: hosted endpoint
 
-- `## Runtime`. State that the container we build does not load the
+- `## Runtime`. State that the built container does not load the
   model; it dials the user's inference server. Docker facts you
   detected still go here (the container is still built and pushed).
   Note that no GPU is needed on the build machine or on the runner.

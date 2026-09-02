@@ -40,8 +40,8 @@ The output is four things:
 Files 1 and 2 are new files on disk. The other two live on the registry
 and on the platform.
 
-This skill is for the case where the model loads into the container we
-build. If the model runs on the user's own inference server (Modal
+This skill is for the case where the model loads into the built
+container. If the model runs on the user's own inference server (Modal
 endpoint, private HTTPS box), use `/containerize-remote-wrap` instead.
 
 Once all four exist, the skill's job is done. After that, ask the user
