@@ -581,9 +581,23 @@ You supply `reset` and `step`: `reset()` starts a new episode and returns the
 first observation; `step(action)` applies an action and returns
 `(next_observation, reward, done, info)`. Together they are a minimal
 stand-in for the benchmark's real physics. Use the catalog `Benchmark` for
-shapes and fake the physics however you like (integrating action deltas into
-a pose, rendering a frame that changes each step). The run scores nothing;
-it exists to prove the driver code runs end to end.
+shapes and write the simplest possible step logic (integrating action deltas
+into a pose, rendering a frame that changes each step). The run scores
+nothing; it exists to prove the driver code runs end to end.
+
+**How to describe this run to the user.** Call it a "smoke test with
+dummy inputs" or "an end-to-end sanity check that the driver runs
+cleanly." Do NOT say you are "faking the physics" or "using fake
+data." Those phrases are correct SDK jargon but read as
+untrustworthy to a non-engineer.
+
+**Do not treat episode-to-episode differences as a wrap bug.** With
+hand-written `reset`/`step`, the two episodes will not exactly
+reproduce each other unless the stand-in is deterministic. That is
+expected. The check the live run answers is: "does the driver run
+end to end without raising?" That is all. If both episodes finish
+without an exception, proceed to the handoff. Do not go back and
+edit the wrap to make the episodes match.
 
 > **Phase 3 checkpoint:**
 > ```
@@ -610,7 +624,7 @@ it exists to prove the driver code runs end to end.
 > Live run:
 >   episodes                     = ?
 >   forward_count                = ? (expected: ceil(steps / exec_steps) * episodes)
->   ep 2 reproduced ep 1         = yes|no
+>   ran without raising          = yes|no
 > ```
 
 ---
@@ -634,8 +648,8 @@ it exists to prove the driver code runs end to end.
       embodiment spec
 - [ ] Checks pass; `verify` zero failed (or documented exception);
       `not_checked` quoted in handoff
-- [ ] **`evaluate` ran** at least 2 episodes without error; forward cadence
-      counted; second episode reproduced the first's opening steps
+- [ ] **`evaluate` ran** at least 2 episodes without raising; forward
+      cadence counted
 - [ ] Handoff states what was and was not proven
 
 ---
@@ -645,25 +659,45 @@ it exists to prove the driver code runs end to end.
 The skill ends at the checklist above. Do **not** invoke another skill
 automatically. In particular, do **not** call `/containerize-wrap` on
 your own after saying "the wrap is proven"; that skill costs registry
-storage and often cloud time, and the user has to opt in before any of
-that happens.
+storage and often cloud time, and the user has to opt in first. Each
+step in the Manifold flow is a separate skill by design; auto-chaining
+skips the user's chance to review.
 
-Each step in the Manifold flow is a separate skill by design.
-Chaining them into one action skips the user's chance to review the
-wrap before spending real resources, and new users don't yet have the
-mental model to know the next step is coming.
+**Keep the handoff SHORT.** A long summary reads as "we're done." The
+user needs to see, at a glance, that there is a next step. Aim for
+under 8 lines total, and put the next step in a visible box so it
+does not get buried in prose.
 
-Hand back to the user with a short summary:
+Do NOT restate the wrap's design. Do NOT list what was done in Phase
+1 or Phase 2. Do NOT review the checks. The user watched those
+happen; the handoff is about what is next.
 
-- Which wrap was written (module path, pairing name).
-- What was proven (checks, verify, evaluate. Quote any `not_checked`
-  entries).
-- What was not proven (open questions, credentials the user still
-  needs to arrange, benchmark score not yet measured).
-- The suggested next skill (`/containerize-wrap`) with a note that the
-  user should invoke it themselves when they are ready.
+Use this exact shape:
 
-Then stop. Wait for the user to decide what to do next.
+1. **One line: status.** Example: "Wrap is written and passes the
+   checks."
+2. **One line: what got made.** The module path and the pairing name.
+3. **Caveats, only if any.** One line each. `verify` entries under
+   `not_checked`, or a credential the user still needs to arrange.
+   Skip this entirely if there are none.
+4. **Next step, boxed.** Present the next skill as a bordered
+   call-out so it stands apart from the prose. For example:
+
+   ```
+   ┌────────────────────────────────────────────────────────┐
+   │  NEXT: run  /containerize-wrap                         │
+   │  Packages the policy and registers it on Manifold.     │
+   └────────────────────────────────────────────────────────┘
+   ```
+
+   A one-row markdown table works too, if box-drawing characters
+   render badly in the harness:
+
+   | Next step | What it does |
+   |---|---|
+   | Run `/containerize-wrap` | Package the policy and register it on Manifold. |
+
+Then stop. Wait for the user to invoke the next skill.
 
 ---
 

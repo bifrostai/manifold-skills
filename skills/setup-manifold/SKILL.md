@@ -30,13 +30,15 @@ manager, plus a set of fields that changes with the model runtime.
 The interview asks first where the model runs, then branches to the
 follow-up questions that fit that answer. Two possible answers:
 
-- **In the built container.** The container loads the checkpoint
-  itself. Needs GPU, VRAM, weights on disk or in a hub.
+- **Manifold loads and runs the model.** The user gives Manifold
+  the checkpoint (weights on disk, or a hub id). Each run loads
+  the checkpoint into GPU memory on Manifold's machines.
   Next skill: `/wrap-policy`, then `/containerize-wrap`.
-- **On the user's own inference server.** The container dials the
-  server over HTTPS and forwards observations to it. No GPU, no
-  weights, no model stack in the container. Modal endpoints and
-  private HTTPS boxes both fit here.
+- **The model already runs on the user's own server; Manifold
+  calls it.** The user keeps an inference server up somewhere
+  (Modal endpoint, private HTTPS box). Manifold sends observations
+  to it over the network and reads back the actions. No GPU is
+  needed on Manifold's side.
   Next skill: `/wrap-remote-policy`, then `/containerize-remote-wrap`.
 
 The follow-up questions and the sections written into `CONTEXT.md`
@@ -160,15 +162,20 @@ Two rounds of questions.
 Ask these together, in one prompt to the user. They apply regardless
 of which branch is chosen.
 
-- **Model runtime.** Where does the model run? Options:
-  - **In the built container.** The container will load the
-    checkpoint on start and keep it in GPU memory.
-  - **On the user's own inference server.** The built container will
-    dial the server over HTTPS and forward observations to it.
-    Modal endpoints and private HTTPS boxes both fit here.
+- **Where does the model run when Manifold uses it?** Options:
+  - **Manifold loads and runs it.** The user gives Manifold the
+    checkpoint (weights on disk, or a hub id); Manifold loads it
+    into GPU memory on their machines each run.
+  - **The user already runs it on their own server; Manifold calls
+    it.** The user has an inference server up somewhere (a Modal
+    endpoint, a private HTTPS box). Manifold sends observations to
+    it over HTTPS and reads back the actions.
 
-  This answer picks the branch for Round 2 and the recommended next
-  skill in the handoff.
+  Ask the question in whatever plain-language wording fits the
+  conversation; the exact phrasing above is not required. Avoid the
+  word "container" unless the user has already used it. The answer
+  picks the branch for Round 2 and the recommended next skill in
+  the handoff.
 - **Policy name.** What to call this policy on Manifold. Becomes the
   `<slug>` in `manifold policy init <slug>`. The user names it; do not
   suggest one.
@@ -192,7 +199,7 @@ the slug), visibility (defaults to `org`).
 
 ### Round 2, branch A: in-container model
 
-Ask these only if Round 1 answered "in the built container":
+Ask these only if the user picked "Manifold loads and runs it":
 
 - **Peak VRAM at inference, in GB.** The user knows this from their
   own runs; the agent cannot measure it without running the model.
@@ -206,8 +213,7 @@ Ask these only if Round 1 answered "in the built container":
 
 ### Round 2, branch B: hosted endpoint
 
-Ask these only if Round 1 answered "on the user's own inference
-server":
+Ask these only if the user picked "the user's own server":
 
 - **Endpoint URL.** The base URL the container will dial (for example
   `https://<user>--<app>.modal.run`). The user has this from wherever
