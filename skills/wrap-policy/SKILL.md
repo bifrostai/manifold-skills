@@ -2,8 +2,10 @@
 name: wrap-policy
 description: >
   Wrap a researcher's policy for the Manifold platform, then prove it with
-  check_compatibility, verify, and a live run of the driver. Use when asked to
-  prepare a policy for Manifold.
+  check_compatibility, verify, and a live run of the driver. Use when the
+  model loads into the container we build. For policies where the model
+  runs on the user's own inference server (Modal, private HTTPS box),
+  use `/wrap-remote-policy` instead.
 compatibility: >
   Run this skill from the user's policy project directory, after
   `/setup-manifold` has written `<project>/.manifold/CONTEXT.md`. Everything this
@@ -17,26 +19,30 @@ Use the manifold-sdk to wrap one policy so a Manifold benchmark can drive it.
 The output of this process is a complete folder containing Python files:
 a driver, a profile, and a pairing.
 
+This skill is for the case where the model loads into the container we
+build. If the model runs on the user's own inference server (Modal
+endpoint, private HTTPS box), use `/wrap-remote-policy` instead.
+
 All conversions and transformations must be done on this policy wrap. The
 benchmark side is fixed.
 
 Your task is complete when both `check_compatibility` and `verify` pass AND
 the wrap runs cleanly under `evaluate`. The two checks pass specs and dummy
 data through the PIPELINE only. Any wrong gripper polarity, action width, or
-proprioception can pass them but crash (or fail silently) at runtime — which
+proprioception can pass them but crash (or fail silently) at runtime, which
 is why the live `evaluate` run is mandatory.
 
 ## Rules
 
 **Confirm before doing anything else.** First thing after this skill
-loads, tell the user in your own words what it will do and why —
+loads, tell the user in your own words what it will do and why:
 adding `manifold-sdk` to the project's deps and creating files under
 `<project>/.manifold/`, both so the wrap can run in their own
 environment against their own model code. Wait for a yes before
 reading `CONTEXT.md` or touching anything.
 
 **Run in the user's policy directory.** Once the user has said yes,
-confirm the current working directory is their policy project — the
+confirm the current working directory is their policy project: the
 same one `/setup-manifold` ran in. Look for `<project>/.manifold/CONTEXT.md` at
 the root; if it does not exist, stop and ask the user to run `/setup-manifold`
 first. If the current directory does not look like their policy project
@@ -45,11 +51,16 @@ correct path.
 
 **Read `.manifold/CONTEXT.md` next.** setup-manifold already
 interviewed the user and recorded everything wrap-policy would
-otherwise ask —
-package manager, source folders, weights location, GPU / VRAM,
-deployment style, registry, and the policy slug and benchmarks of
-interest. Read that file before asking the user anything else; ask
-only about details `CONTEXT.md` does not already cover.
+otherwise ask: package manager, source folders, weights location,
+GPU / VRAM, deployment style, registry, and the policy slug and
+benchmarks of interest. Read that file before asking the user
+anything else; ask only about details `CONTEXT.md` does not already
+cover.
+
+**Stop if this is a hosted-endpoint policy.** If `CONTEXT.md` has
+`model_runtime = hosted_endpoint`, this skill is the wrong one. Stop
+and point the user at `/wrap-remote-policy`, which handles wraps for
+policies that run on the user's own inference server.
 
 **Jobs setup-manifold delegated to this skill.** setup-manifold wrote
 `CONTEXT.md` and nothing else. Once you've read it, do these before
@@ -70,7 +81,7 @@ writing any wrap code:
   Recording without installing (or the reverse) leaves the project
   half-set-up. If the install fails on a dependency conflict, stop and
   hand the error to the user.
-- Create the folder `<project>/.manifold/<slug>/` — the slug is in
+- Create the folder `<project>/.manifold/<slug>/`. The slug is in
   `CONTEXT.md`. All wrap files below live inside it.
 
 **Plan the entire task in a to-do list before you start, and update it as
@@ -100,7 +111,7 @@ All wrap files live under `<project>/.manifold/<slug>/`, where
 |---|---|---|
 | `.manifold/<slug>/driver.py` | endpoint + session | yes |
 | `.manifold/<slug>/profile.py` | frozen dataclass: signature, weights, chunk, exec_steps, layouts, `load()` | no |
-| `.manifold/<slug>/<benchmark>.py` | pairing file — exports `PROFILE` / `BENCHMARK` / `PIPELINE` (one file per benchmark) | no |
+| `.manifold/<slug>/<benchmark>.py` | pairing file, exports `PROFILE` / `BENCHMARK` / `PIPELINE` (one file per benchmark) | no |
 
 - `driver.py` loads the model onto the GPU and runs it.
 - `profile.py` is a lightweight spec describing what the model expects (image sizes, state shape, chunk length, weights path).
@@ -272,7 +283,7 @@ Frozen dataclass satisfying `recipes.PolicyProfile`: fields `signature`,
 plus a `load(weights, device) -> PolicyEndpoint` method.
 
 Defer the driver import into `load()` so `profile.py` imports without the
-model stack. Take `device` as a `load()` parameter — checkpoints bake in the
+model stack. Take `device` as a `load()` parameter. Checkpoints bake in the
 training device, and the caller passes the runtime one at load time.
 
 - **`chunk`/`exec_steps` have no check.** Missing `exec_steps` by exact name
@@ -303,10 +314,10 @@ Write the driver, assemble the pipeline, pass both checks, then prove it live.
 
 ### File skeletons
 
-Write these three files. Each snippet below is the minimum shape — fill in the
+Write these three files. Each snippet below is the minimum shape. Fill in the
 model-specific logic, then flesh out with the rules that follow.
 
-**`profile.py`** — frozen dataclass, no model-stack imports at top level:
+**`profile.py`**. Frozen dataclass, no model-stack imports at top level:
 
 ```python
 from dataclasses import dataclass
@@ -327,7 +338,7 @@ class MyProfile:
         return MyEndpoint(self, weights, device)
 ```
 
-**`driver.py`** — endpoint (loads the model once) + session (one per runner):
+**`driver.py`**. Endpoint (loads the model once) + session (one per runner):
 
 ```python
 import threading
@@ -356,7 +367,7 @@ class MySession(OpenLoopChunkQueue):
         return self._endpoint.forward(native)
 ```
 
-**`<policyname>_<benchmarkname>.py`** — the pairing file. Builds the signature
+**`<policyname>_<benchmarkname>.py`**. The pairing file. Builds the signature
 and two layouts, instantiates the profile, then declares `PROFILE`,
 `BENCHMARK`, `PIPELINE`:
 
@@ -393,22 +404,22 @@ The rest of this phase is the rules for filling those `...` in correctly.
 ### Where to put each translation
 
 The benchmark's data won't match what your model expects. Something has to
-convert between them — resize a camera, change a rotation format, normalize a
+convert between them: resize a camera, change a rotation format, normalize a
 state vector, and so on.
 
 The SDK gives you three places to put those conversions. It's a
 safety-vs-flexibility ladder: higher up, the SDK can check what you did; lower
 down, you can do anything but nothing is checked.
 
-- **Pipeline adapters** — for reusable typed conversions. Built-in adapters
+- **Pipeline adapters**. For reusable typed conversions. Built-in adapters
   cover rotation format, gripper polarity, camera resize/flip/channel-order,
   frame rebase, and frame history. `check_compatibility` inspects the chain
   and validates it.
-- **NativeLayout entries** — for structural plumbing: renaming keys, casting
+- **NativeLayout entries**. For structural plumbing: renaming keys, casting
   to `float32`, slicing arrays, splitting one vector into two. Not typed, so
-  `check_compatibility` can't reason about them — but `verify` pushes data
+  `check_compatibility` can't reason about them, but `verify` pushes data
   through and confirms the shapes come out right.
-- **Driver session code** — for per-model idiosyncrasies the SDK has no
+- **Driver session code**. For per-model idiosyncrasies the SDK has no
   adapter for: normalization stats baked into a specific checkpoint,
   transposing image axes to `(C, H, W)` for torchvision, computing a gripper
   "openness" from raw joint positions. Neither check sees any of this.
@@ -435,7 +446,7 @@ return the full chunk. Do not build your own chunk buffer.
 **Instruction**: `native[key]` arrives as `("text",)`. Unwrap with `str(x[0])`.
 
 **Axis transpose**: no permute op exists; `SwapChannelOrder` is RGB↔BGR only.
-Torchvision models need `(C, H, W)` — transpose in the session.
+Torchvision models need `(C, H, W)`. Transpose in the session.
 
 **Override `reset()`** (calling `super().reset()`) only if the model holds
 per-episode state.
@@ -443,18 +454,18 @@ per-episode state.
 ### Pipeline
 
 `recipes.resolve(policy, benchmark, adapters)` finds a chain that bridges the
-pairing — use as a head start when filling in the pipeline's observation and
+pairing. Use it as a head start when filling in the pipeline's observation and
 action adapter lists. It cannot discover stateful adapters (filters them out).
 
 **Convert encodings, never spaces.** Rotation re-encode, gripper polarity,
-resize: encodings. Joint↔EE, position↔velocity: different controllers — wrong
+resize: encodings. Joint↔EE, position↔velocity: different controllers. Wrong
 checkpoint, stop.
 
 **No loose convention math in the driver.** Use catalog adapters or write a
 custom adapter (see the `manifold.core.adapter` protocol).
 
-**Replicate the project's action postprocessing end to end.** Read every line
-— helpers routinely scale, then negate, then clip.
+**Replicate the project's action postprocessing end to end.** Read every line;
+helpers routinely scale, then negate, then clip.
 
 **Prove each conversion is needed.** Three-extremes test (low, middle, high).
 If values already match, add no adapter.
@@ -475,9 +486,9 @@ adapter.
 `verify`.** Adapters can pass data across the two halves through a shared
 Python dictionary (`state_key`). `verify` tests the action chain with an
 empty dictionary and never runs the observation chain to populate it, so any
-such value is missing — the action adapter either crashes (`verify` fails) or
+such value is missing, so the action adapter either crashes (`verify` fails) or
 fakes a default (`verify` passes, but the first action of every real episode
-is silently wrong). Workaround: do the conversion in the driver session —
+is silently wrong). Workaround: do the conversion in the driver session;
 checks don't inspect session code. Real fix: `verify` should run the
 observation chain first. File as an SDK bug.
 
@@ -486,7 +497,7 @@ converts between absolute pose and delta pose. If your model wants deltas but
 the benchmark gives absolutes (or vice versa), write the pair yourself: the
 observation adapter writes the current `ee_pose` to the shared dictionary,
 the action adapter subtracts it. For chunked models (`exec_steps > 1`), only
-the first predicted action has a real reference pose to subtract — the rest
+the first predicted action has a real reference pose to subtract, since the rest
 would need faked references. Flag it and stop; don't fake it.
 
 ### Check the wrap
@@ -523,7 +534,7 @@ print(read_pairing(importlib.import_module('<your wrap module>')))
 "
 ```
 
-If `verify` reports `not_checked` entries, list them in the handoff — do not
+If `verify` reports `not_checked` entries, list them in the handoff. Do not
 claim the wrap is "verified" if pieces went untested.
 
 **When `check_compatibility` returns INCOMPATIBLE**, dump both specs
@@ -532,7 +543,7 @@ for each kind of mismatch:
 
 | Mismatch | Fix |
 |---|---|
-| action-space class (Joint vs EE vs Unified) | STOP — different controller |
+| action-space class (Joint vs EE vs Unified) | STOP: different controller |
 | `rotation` (action) | `RotationFormatAdapter` |
 | `rotation` (proprio) | `ProprioRotationAdapter` |
 | `gripper` polarity (action) | `GripperPolarityAdapter`; `GripperThresholdAdapter` for continuous |
@@ -541,14 +552,14 @@ for each kind of mismatch:
 | `frame` (proprio) | `FrameRebaseAdapter` / `DynamicFrameRebaseAdapter` |
 | camera shape | `ResizeCameras` |
 | camera orientation/channel | `Rotate180Cameras` / `FlipVerticalCameras` / `SwapChannelOrder` |
-| camera name mismatch | no rename adapter — custom adapter needed |
+| camera name mismatch | no rename adapter, custom adapter needed |
 | camera rank (clip vs frame) | `StackFrameHistory` + clip shape in signature |
 | action width (EE → padded) | `BasePinWiden` (EE→Unified); `UnifiedSliceAdapter` (Unified→EE) |
-| `chunk_size` | set to 1 — the chunk lives in raw output |
+| `chunk_size` | set to 1, the chunk lives in raw output |
 | `delta` (single-step) | custom stateful adapter pair (see Traps above) |
-| `delta` (chunked) | open problem — flag it |
-| `frame` (action) | no adapter — needs kinematics, STOP |
-| joint ↔ EE | STOP — different controller |
+| `delta` (chunked) | open problem, flag it |
+| `frame` (action) | no adapter, needs kinematics, STOP |
+| joint ↔ EE | STOP: different controller |
 
 ### Run the wrap (MANDATORY)
 
@@ -569,7 +580,7 @@ result = evaluate(
 You supply `reset` and `step`: `reset()` starts a new episode and returns the
 first observation; `step(action)` applies an action and returns
 `(next_observation, reward, done, info)`. Together they are a minimal
-stand-in for the benchmark's real physics — use the catalog `Benchmark` for
+stand-in for the benchmark's real physics. Use the catalog `Benchmark` for
 shapes and fake the physics however you like (integrating action deltas into
 a pose, rendering a frame that changes each step). The run scores nothing;
 it exists to prove the driver code runs end to end.
@@ -593,7 +604,7 @@ it exists to prove the driver code runs end to end.
 >     reasons                    = [if any]
 >   verify                       = N checked, M failed, K not checked
 >     failed                     = [list]
->     not_checked                = [list — quote in handoff]
+>     not_checked                = [list, quote in handoff]
 >   read_pairing                 = success|failure
 >
 > Live run:
@@ -629,11 +640,11 @@ it exists to prove the driver code runs end to end.
 
 ---
 
-## Stop here — hand back to the user
+## Stop here, hand back to the user
 
 The skill ends at the checklist above. Do **not** invoke another skill
 automatically. In particular, do **not** call `/containerize-wrap` on
-your own after saying "the wrap is proven" — that skill costs registry
+your own after saying "the wrap is proven"; that skill costs registry
 storage and often cloud time, and the user has to opt in before any of
 that happens.
 
@@ -645,7 +656,7 @@ mental model to know the next step is coming.
 Hand back to the user with a short summary:
 
 - Which wrap was written (module path, pairing name).
-- What was proven (checks, verify, evaluate — quote any `not_checked`
+- What was proven (checks, verify, evaluate. Quote any `not_checked`
   entries).
 - What was not proven (open questions, credentials the user still
   needs to arrange, benchmark score not yet measured).
@@ -658,35 +669,35 @@ Then stop. Wait for the user to decide what to do next.
 
 ## Reference: import paths
 
-- `manifold.recipes` — `read_pairing`, `launch_server`, `serve`, `evaluate`,
+- `manifold.recipes`. `read_pairing`, `launch_server`, `serve`, `evaluate`,
   `run_benchmark`, `run_sharded_benchmark`, `run_episodes`, `write_rollup`,
   `OpenLoopChunkQueue`, `ChunkEndpoint`, `PolicyProfile`, `resolve`,
   `from_lerobot_checkpoint` / `SignatureSuggestion`, `describe`, `Recorder`,
   `dump`, `load`, `NO_RECORDER`
-- `manifold.recipes.serving` — `PolicyEndpoint` and `Session` protocols (NOT
+- `manifold.recipes.serving`. `PolicyEndpoint` and `Session` protocols (NOT
   re-exported by `manifold.recipes`)
-- `manifold.core.check` — `check_compatibility` → `Report`
-- `manifold.core.verify` — `verify` → `VerifyReport`
-- `manifold.core.pipeline` — `Pipeline`
-- `manifold.core.policy` — `PolicySignature`
-- `manifold.core.embodiment` — `EEActionSpace`, `JointActionSpace`,
+- `manifold.core.check`. `check_compatibility` returns `Report`
+- `manifold.core.verify`. `verify` returns `VerifyReport`
+- `manifold.core.pipeline`. `Pipeline`
+- `manifold.core.policy`. `PolicySignature`
+- `manifold.core.embodiment`. `EEActionSpace`, `JointActionSpace`,
   `UnifiedActionSpace`, `Proprioception`, `EEObservationSpec`,
   `GripperObservationSpec`
-- `manifold.core.conventions` — `RotationFormat`, `GripperFormat`, `Frame`
+- `manifold.core.conventions`. `RotationFormat`, `GripperFormat`, `Frame`
   (pass enum members, never string values)
-- `manifold.core.native_layout` — `NativeLayout`, `LayoutEntry`
+- `manifold.core.native_layout`. `NativeLayout`, `LayoutEntry`
   (`.from_camera` / `.from_state` / `.from_instruction`), `SourceKind`,
   `Slice`, `Split`, `BatchAxis`, `DtypeCast`, `Component`, `Assemble`
-- `manifold.benchmarks` — `ALL`, `LIBERO`, `SIMPLER`, `ROBOCASA`
-- `manifold.adapters` — `PackToNativeLayout`, `UnpackFromNativeLayout`,
+- `manifold.benchmarks`. `ALL`, `LIBERO`, `SIMPLER`, `ROBOCASA`
+- `manifold.adapters`. `PackToNativeLayout`, `UnpackFromNativeLayout`,
   `ObservationTap`, `ActionTap` (convention adapters are one level down)
-- `manifold.adapters.observation` — `ProprioRotationAdapter`,
+- `manifold.adapters.observation`. `ProprioRotationAdapter`,
   `FrameRebaseAdapter`, `DynamicFrameRebaseAdapter`, `ObservedGripperAdapter`,
   `ResizeCameras`, `Rotate180Cameras`, `FlipVerticalCameras`,
   `SwapChannelOrder`, `StackFrameHistory`
-- `manifold.adapters.action` — `RotationFormatAdapter`,
+- `manifold.adapters.action`. `RotationFormatAdapter`,
   `GripperPolarityAdapter`, `GripperThresholdAdapter`,
   `UnifiedGripperThresholdAdapter`, `UnifiedSliceAdapter`, `BasePinWiden`,
   `DiscreteBinarize`
-- `manifold.lib.rotation.convert` — driver-side rotation re-encode
-- `manifold.lib.gripper` — action-side gripper remaps
+- `manifold.lib.rotation.convert`. Driver-side rotation re-encode
+- `manifold.lib.gripper`. Action-side gripper remaps

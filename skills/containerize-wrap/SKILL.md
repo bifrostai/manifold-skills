@@ -5,7 +5,9 @@ description: >
   then build it, push it to a container registry, register it, and run it. Use
   when asked to "containerize my policy", "build the policy image", "push my
   wrap to ghcr", "register my policy on the platform", or "get my wrap running
-  on the platform".
+  on the platform". This skill is for the case where the model loads into the
+  container. For policies where the model runs on the user's own inference
+  server, use `/containerize-remote-wrap` instead.
 compatibility: >
   Run this skill from the user's policy project directory, after
   `/wrap-policy` has written the wrap files under
@@ -38,6 +40,10 @@ The output is four things:
 Files 1 and 2 are new files on disk. The other two live on the registry
 and on the platform.
 
+This skill is for the case where the model loads into the container we
+build. If the model runs on the user's own inference server (Modal
+endpoint, private HTTPS box), use `/containerize-remote-wrap` instead.
+
 Once all four exist, the skill's job is done. After that, ask the user
 whether to submit a scored test run against a benchmark of their choice
 (Phase 4 walks through it). Do not submit a run on your own.
@@ -48,15 +54,15 @@ This skill does not fix wrap bugs. If the wrap does not pass both
 ## Rules
 
 **Confirm before doing anything else.** First thing after this skill
-loads, tell the user in your own words what it will do and why —
-building a Docker image (10–30 GB of local disk), pushing it to their
+loads, tell the user in your own words what it will do and why:
+building a Docker image (10 to 30 GB of local disk), pushing it to their
 registry, and registering it on Manifold, so the platform can pull and
 run their policy against benchmarks. Wait for a yes before reading
 `CONTEXT.md` or touching anything. Push, register, and submit still
 have their own per-step confirmations later.
 
 **Run in the user's policy directory.** Once the user has said yes,
-confirm the current working directory is their policy project — the
+confirm the current working directory is their policy project. The
 same one `/setup-manifold` and `/wrap-policy` ran in. Look for
 `<project>/.manifold/CONTEXT.md` and `.manifold/<slug>/` (with the
 wrap files inside). If either is missing, stop and ask the user to run
@@ -67,6 +73,11 @@ the package manager, registry, weights location, deployment style,
 GPU / VRAM, and benchmarks of interest; wrap-policy added anything
 else it learned. Read `CONTEXT.md` before asking the user anything;
 ask only about details it does not cover.
+
+**Stop if this is a hosted-endpoint policy.** If `CONTEXT.md` has
+`model_runtime = hosted_endpoint`, this skill is the wrong one. Stop
+and point the user at `/containerize-remote-wrap`, which packages
+wraps for policies that run on the user's own inference server.
 
 **Write into `.manifold/<slug>/`.** The `Dockerfile` and `serve.py`
 this skill produces both live under
@@ -104,7 +115,7 @@ start and finish, so the user can follow along without asking.
 system.** Each of the choices below costs the user time, cloud credits, or
 registry storage. Do not pick any of them yourself:
 
-- The target benchmark for the scored test run — never pick "a reasonable
+- The target benchmark for the scored test run. Never pick "a reasonable
   benchmark" for the user.
 - Pushing the image to the registry.
 - Registering the policy on the platform.
@@ -113,11 +124,11 @@ registry storage. Do not pick any of them yourself:
 At each of those points: state what you are about to do, wait for a
 confirmation, and only then proceed. Do not chain "wrap built successfully,
 now submitting a run against <a benchmark>" into one action. **If the user
-declines any of these, stop the skill there — do not skip to the next
+declines any of these, stop the skill there; do not skip to the next
 step.**
 
-The **policy name** — the thing that becomes `<slug>` in
-`manifold policy init <slug>` — is **not** on that list. setup-manifold
+The **policy name** (the thing that becomes `<slug>` in
+`manifold policy init <slug>`) is **not** on that list. setup-manifold
 picks it and hands it here. Do not rename the policy on the user's
 behalf. If the slug is missing, ask the user once for it.
 
@@ -138,12 +149,12 @@ Three consequences follow:
 1. **One image per wrap.** The `CMD` in the Dockerfile picks which wrap the
    container serves. Registration cannot override it.
 2. **Tags become versions.** `manifold policy init` reads the image tag and
-   uses it as the version string. Never reuse a tag — old tags are
+   uses it as the version string. Never reuse a tag; old tags are
    immutable.
 3. **Nothing local proves the image works end to end.** A clean local
    `docker run` only shows that the server starts. Whether the platform
    can pull, schedule, drive, and score the image is only settled by an
-   actual scored run — which is up to the user to submit.
+   actual scored run, which is up to the user to submit.
 
 ---
 
@@ -154,7 +165,7 @@ policy name, and the manifold-sdk version pinned down first.
 
 **The wrap.** Confirm the wrap passes both `check_compatibility` and
 `verify` under `wrap-policy`. Record the module path that exports
-`PROFILE`, `BENCHMARK`, and `PIPELINE` — the Dockerfile's `CMD` will name
+`PROFILE`, `BENCHMARK`, and `PIPELINE`. The Dockerfile's `CMD` will name
 it.
 
 **The policy name.** This is the slug used in `manifold policy init
@@ -163,17 +174,17 @@ is missing, ask the user once for it. Do not invent one.
 
 **The image name.** Built from the policy slug plus the org's registry
 and namespace, in the shape:
-`<registry>/<namespace>/policy-<slug>:<tag>` — for example
+`<registry>/<namespace>/policy-<slug>:<tag>`. For example
 `ghcr.io/<your-org>/policy-mypolicy-mybench:0.1.0`. The tag is a version
 string; bump it for every change to the wrap or the Dockerfile. This
-skill constructs the image name from those parts — do not ask the user
+skill constructs the image name from those parts; do not ask the user
 to type it out.
 
-Examples below use `ghcr.io/<your-org>` — substitute the actual registry
+Examples below use `ghcr.io/<your-org>`. Substitute the actual registry
 and namespace throughout.
 
 **The manifold-sdk version.** Install the same manifold-sdk version the
-wrap was written against — read it from the wrap's environment
+wrap was written against. Read it from the wrap's environment
 (`uv.lock`, `pyproject.toml`, or `uv pip freeze`). The policy and the
 benchmark exchange messages defined by the SDK, and mismatched versions
 can silently disagree at run time.
@@ -199,7 +210,7 @@ this phase is a decision, not implementation.
 
 Assume the user has a project folder with the model's code and
 dependencies. Whether it's a cloned git repo, a fork, a local working
-directory, or a messy research folder on a shared workstation — treat
+directory, or a messy research folder on a shared workstation. Treat
 it the same way.
 
 The image contains, in this order:
@@ -216,7 +227,7 @@ The image contains, in this order:
 3. **manifold-sdk**, installed on top with `uv pip install manifold-sdk`
    at the version the wrap was written against.
 4. **The parts of the project folder that the wrap imports from.**
-   `driver.py` names what inference needs — trace its imports (and
+   `driver.py` names what inference needs. Trace its imports (and
    their transitive imports) back to the folders they live in, and
    `COPY` only those. Skip everything else: training scripts, datasets,
    logs (`wandb/`, `tb_logs/`), notebooks, alternate checkpoints,
@@ -224,8 +235,8 @@ The image contains, in this order:
    If the container crashes at startup on a missing import, add that
    path. Set `ENV PYTHONPATH=/app` (or wherever you copied to) so the
    imports resolve.
-5. **The wrap module and the launcher** — `profile.py`, `driver.py`,
-   the pairing file, and `serve.py` — copied into the `WORKDIR`.
+5. **The wrap module and the launcher** (`profile.py`, `driver.py`,
+   the pairing file, and `serve.py`), copied into the `WORKDIR`.
 
 ### Pin the project source
 
@@ -242,7 +253,7 @@ Two ways to get the model checkpoint into the running container:
 
 - **Fetched at first load.** The profile's `default_weights` contains a
   hub id or path. Point the model library's checkpoint cache at
-  `/opt/manifold/cache` (whatever env var it uses — `HF_HOME` for
+  `/opt/manifold/cache` (whatever env var it uses: `HF_HOME` for
   Hugging Face, `TORCH_HOME` for torch hub, etc.). The platform mounts
   a persistent host directory at that path, so the download happens
   once per box and is reused across runs.
@@ -250,11 +261,11 @@ Two ways to get the model checkpoint into the running container:
   The container has a 10-minute window to become ready (bind port 8000
   and accept a TCP connection). That window covers both the download
   and the load into GPU memory. A large checkpoint may not finish in
-  time on a cold box — for those, prefer baking.
+  time on a cold box; for those, prefer baking.
 
   **If the checkpoint needs a credential** (gated Hugging Face repo,
   private hub repo, private S3 bucket), you cannot use "fetched at
-  first load" today — the platform does not currently give you a way
+  first load" today; the platform does not currently give you a way
   to hand a run-time credential to your container. Bake the checkpoint
   in instead. Do **not** try to work around this by putting the
   credential in the image (`ENV HF_TOKEN=...`, copied
@@ -263,7 +274,7 @@ Two ways to get the model checkpoint into the running container:
   time. Two common cases:
   - **You already have the weights on disk** (a checkpoint from your
     training run, a folder you downloaded earlier). Just `COPY` the
-    files into the image — no auth, no download, done.
+    files into the image. No auth, no download, done.
   - **You need to fetch them from a private source at build time.** Do
     it on a machine where you already have the credential, so `pip`,
     `huggingface-cli`, or `aws` can resolve the download using your
@@ -329,7 +340,7 @@ disable it or copy the files into the image at build time. A container in
 an offline environment will fail at load otherwise.
 
 **GPU memory pre-allocation.** Some frameworks claim all GPU memory at
-startup — JAX does this by default. Disable that behavior in the
+startup; JAX does this by default. Disable that behavior in the
 Dockerfile with the framework's environment variable. Otherwise, on a
 shared box, all GPU memory is consumed before the benchmark renderer
 starts.
@@ -380,7 +391,7 @@ more. The server has not run yet.
 
 Skip this step on a CPU-only machine. A robotics policy needs a GPU to
 load and serve, so a CPU-only local run only tells you whether Python
-could import — not whether the container actually works. On CPU-only,
+could import, not whether the container actually works. On CPU-only,
 proceed straight to Push; the container will first be exercised for
 real when the user submits a run in Phase 4.
 
@@ -398,7 +409,7 @@ listening on 0.0.0.0:8000 (TCP), up to 8 concurrent shard(s)
 
 Dependency conflicts, import errors, and model loading failures surface
 here, not during build. If the listening line does not appear (crash,
-hang, silent exit), **do not push** — fix the Dockerfile or the wrap
+hang, silent exit), **do not push**. Fix the Dockerfile or the wrap
 and rebuild first.
 
 ### Push
@@ -419,7 +430,7 @@ docker push <registry>/<namespace>/policy-<slug>:<tag>
 
 - **Public registry** (a public ghcr package, a public Docker Hub repo).
   Pull just works, no credentials involved. A new ghcr package starts
-  private — flip it to public at
+  private. Flip it to public at
   `https://github.com/orgs/<org>/packages/container/<package>/settings`
   before any run.
 - **Private registry** (private ghcr package, private Docker Hub repo,
@@ -428,7 +439,7 @@ docker push <registry>/<namespace>/policy-<slug>:<tag>
   submitting a run.
 
 Either way, a pull failure at run time surfaces as a scheduling or pull
-error, not "permission denied" — so if the platform can't reach the
+error, not "permission denied", so if the platform can't reach the
 image, the run just looks broken.
 
 > **Phase 3 checkpoint:**
@@ -468,7 +479,7 @@ The image tag becomes the version. So
 can accept this image (the scheduler compares against reported GPU
 memory), and it decides whether the container gets GPU access (`--gpus
 all` is only added to `docker run` when `minimum_gpu_memory_gb > 0`). A
-GPU model registered with 0 starts without GPU access — it will run very
+GPU model registered with 0 starts without GPU access. It will run very
 slowly on CPU or crash at model load. Set `<N>` to the model's actual GPU
 memory footprint, rounded up.
 
@@ -487,7 +498,7 @@ so, which registered benchmark should I pair it against? A run costs
 cloud time."
 
 Do not pick a benchmark. Do not submit on your own. If the user says no,
-stop here — the skill is done.
+stop here; the skill is done.
 
 If the user says yes and names a benchmark, run:
 
@@ -501,8 +512,8 @@ Before submitting:
 - The named benchmark must be registered and must have a working image.
   If the run fails immediately with an error naming the benchmark image
   (missing image, benchmark container crash on start), that is a
-  benchmark-side problem, not a wrap bug — flag it to the Bifrost team.
-- Runs are visible to everyone in the organization — use a clear
+  benchmark-side problem, not a wrap bug; flag it to the Bifrost team.
+- Runs are visible to everyone in the organization; use a clear
   `--name` if the user wants the run labeled.
 - There is no hardware check before scheduling. A benchmark that needs
   a specific GPU will be scheduled onto a box without one and fail at
@@ -558,7 +569,7 @@ another spend cycle. State the current floor, the higher floor you
 want (round the observed peak up, add ~20% headroom), and the fact
 that the image contents do not change. If the user declines, stop.
 
-If the user says yes, the fix is a re-tag, push, and re-register — no
+If the user says yes, the fix is a re-tag, push, and re-register. No
 rebuild needed since the image is unchanged:
 
 ```sh
@@ -574,7 +585,7 @@ manifold policy init <slug> \
 ```
 
 Then offer another scored test run against the same benchmark. If it
-OOMs again, repeat with a higher floor — each retry needs a fresh
+OOMs again, repeat with a higher floor. Each retry needs a fresh
 user yes. Do not silently keep bumping.
 
 Also update `CONTEXT.md`'s peak-VRAM entry for this policy to the
@@ -587,7 +598,7 @@ again.
 > version                       = ? (from image tag)
 > minimum_gpu_memory_gb         = ? (> 0 for GPU models)
 > register_confirmed_by_user    = yes | no
-> test_run_offered_to_user      = yes  (must be yes — offering is required)
+> test_run_offered_to_user      = yes  (must be yes, offering is required)
 > user_asked_for_test_run       = yes | no  (if no: stop, skill is done)
 >
 > (fill in below only if the user asked for a test run)
