@@ -177,6 +177,15 @@ Get the exact URL path, HTTP method, request body shape, and response
 body shape for each route. The user or their handoff document has
 this. If it does not, stop and ask the user for it; do not guess.
 
+**Check that both routes share one base URL.** The driver reads one
+URL from the environment and sends every request to a path under
+it. On Modal, each `@modal.web_endpoint` function gets its own
+hostname, so `/config` and `/infer` written as two functions end up
+on two URLs. The server has to expose one `@modal.asgi_app()` that
+serves `/config`, `/infer`, and `/health`. If the routes are on
+different hosts, stop and tell the user to restructure the server
+before the wrap is written.
+
 **Note the wire encoding.** JSON, msgpack, msgpack-numpy, protobuf,
 custom. If msgpack-numpy: check whether it is the PyPI package's
 encoding or a project-specific variant. Two variants that look
@@ -197,9 +206,27 @@ memory), the container must pin one session to one server instance.
 
 **Note the auth situation** from `CONTEXT.md` and the server itself.
 Header token, mutual TLS, or none. If a header token is required, the
-Manifold platform does not currently give the container a secret
-store, so the workaround is to restrict the endpoint by network and
-drop the token for now.
+driver reads it from an environment variable, and
+`/containerize-remote-wrap` passes the value at registration with
+`manifold policy init --env`. The platform stores it in plaintext.
+Network restriction is the safer option when the user can arrange
+it.
+
+**If `CONTEXT.md` says `endpoint_status = not_yet_deployed`**, stop.
+The user needs a running server before this skill can do anything.
+If the user asks you to write the server, install every package
+listed in the model's own `pyproject.toml` or `requirements.txt`.
+Do not pick a subset by guessing which packages inference needs.
+Model repositories often import the training stack at module load,
+and a missing package only shows up as a crash on the first
+request.
+
+**Read `image_preprocessing` from `CONTEXT.md`.** This is the flip or
+rotation the model's own code applies to raw camera frames before
+inference. Use it to pick the camera adapter for the pipeline
+(Phase 3). If the value is `unknown`, stop and ask the user before
+designing the signature. Do not guess. The local checks do not test
+image orientation.
 
 **Note the action convention the server emits.** Absolute pose or
 delta pose. Rotation format. Gripper polarity and range. Chunk size
@@ -213,32 +240,57 @@ example LIBERO, SIMPLER, ROBOCASA). Use the manifold-sdk's
 `Benchmark`, not the user's project's vendored copy.
 
 **Read the `Benchmark`:** `embodiment.action`,
-`embodiment.proprioception`, `sensors` (name, resolution, mount),
-`instruction`.
+`embodiment.proprioception`, `sensors` (name, resolution, mount,
+orientation), `instruction`.
 
 **If the benchmark is not available**, stop and notify the user. The
 benchmark must be authored first.
 
+**Composite benchmarks.** Some benchmark slugs combine several task
+groups (for example `libero-plus` combines four LIBERO suites). Ask
+the user whether the server needs different settings for different
+task groups. A common case: the model has one set of action scaling
+statistics for each suite. If yes, the driver has to pick the right
+settings for each episode. The instruction string is the only input
+that identifies the group. See "Instruction entry" in Phase 2 and
+"Composite benchmarks" in Phase 3.
+
+**Instruction strings.** Real instruction strings only exist inside
+the benchmark container during a run. You cannot read one locally,
+and `verify` pushes a placeholder. If the driver uses the
+instruction to choose settings, add two log lines to the driver.
+Print each new instruction string once, when it first arrives.
+Print a warning with the whole string when no match is found. Do
+not fall back to a default silently. After the first scored run,
+read these lines from the run logs and check that no episode hit
+the warning.
+
 > **Phase 1 checkpoint.** Record before designing anything:
 > ```
 > Endpoint side:
+>   endpoint_status    = deployed | not_yet_deployed  (if not deployed: stop)
 >   description_route  = ?  (method, path, body)
 >   inference_route    = ?  (method, path, body)
 >   wire_encoding      = ?
 >   cold_start_budget  = ?  (seconds until /config describes a loaded checkpoint)
 >   first_task_latency = ?  (seconds on the first request per task)
 >   requests_self_contained = yes | no  (if no: session pinning is required)
+>   concurrent_requests = ?  (how many requests the server handles at once)
 >   auth               = open | network_restricted | header_token
 >   action_convention  = {absolute|delta}, rotation=?, gripper=?, frame=?
 >   chunk_size         = ?  (poses returned per request)
 >   chunk_hz           = ?  (frame rate the chunk was trained at)
 >   state_window       = ?  (rows of history the server reads)
+>   image_preprocessing = none | flip_vertical | flip_horizontal | rotate_180  (from CONTEXT.md; stop if unknown)
 >
 > Benchmark side:
 >   target_benchmark   = LIBERO | SIMPLER | ROBOCASA | ...
 >   embodiment_action  = {type, rotation, gripper, delta, frame}
->   cameras_published  = [{name, shape}]
+>   cameras_published  = [{name, shape, orientation}]
 >   instruction        = true | false
+>   composite_benchmark = yes | no  (several task groups in one slug)
+>   per_task_settings  = yes | no | n/a  (server needs different settings for different task groups)
+>   instruction_logging = yes | n/a  (yes when per_task_settings is yes)
 >
 > Feasible: true | false  (if false: why, and stop)
 > ```
@@ -284,6 +336,24 @@ Anything else is benchmark work, not a wrap.
   crash at run time.
 - Describe cameras as what the driver actually forwards. Include
   extra dimensions from frame stacking if the server needs them.
+- Set each camera's `orientation` to the orientation the server
+  expects to receive. Read `image_preprocessing` from `CONTEXT.md`
+  and then read the server code to see whether the server applies
+  that flip itself before inference. Two cases:
+  - The server applies the flip. Declare the benchmark's
+    orientation (from the `Benchmark` sensors in Phase 1). No
+    adapter.
+  - The server does not apply the flip. Start from the benchmark's
+    orientation and apply the model's flip on top. If the benchmark
+    is `UPRIGHT` and the model rotates 180 degrees, declare
+    `ROTATED_180`. If the benchmark is `FLIPPED_VERTICAL` and the
+    model rotates 180 degrees, declare `FLIPPED_HORIZONTAL`. Then
+    run `check_compatibility` and read the adapter name in the
+    report (`Rotate180Cameras`, `FlipVerticalCameras`, or none).
+    Add that adapter to the pipeline's `observation` list.
+  Record which case applies in the Phase 2 checkpoint. The local
+  checks do not test image orientation. If the case is wrong, the
+  run scores near zero.
 - No proprioception? Say so with an empty `Proprioception()`. Don't
   invent fake data to fill the gap.
 - No instruction? Set `instruction=False`.
@@ -318,6 +388,16 @@ an identity window.
 current task's instruction is passed to the driver. Do not cache it
 on the endpoint.
 
+If the driver uses the instruction to pick a task, a task group, or
+any settings, match by longest prefix. The benchmark may append text
+after the task description (a scene id, a noise level, a table
+number). Do not compare whole strings. Do not strip a fixed suffix.
+Sort the known task descriptions by length, longest first, and take
+the first one that the incoming instruction starts with. If none
+match, log a warning with the whole instruction string and fall
+through to a clearly named default. Do not select a default
+silently.
+
 ### The profile: the wrap's spec
 
 The profile carries the signature, the input and output layouts,
@@ -346,7 +426,7 @@ remote wrap.
 
 **Env-tunable knobs.** Some profile fields should be adjustable
 without an image rebuild. Timeout, action steps per reply, chunk
-stride, gripper convention. Provide an env-var override for each,
+stride, gripper convention, concurrent requests. Provide an env-var override for each,
 applied by `load()` via `dataclasses.replace`, so a registered
 version's `config.env` can tweak them. Bake the map into the module:
 
@@ -368,7 +448,9 @@ Defer the driver import into `load()` so `profile.py` imports without
 > PolicySignature:
 >   action_space        = {type}(rotation=?, gripper=?, delta=?, frame=?, chunk_size=1)
 >   proprioception      = {ee_pose: ..., joint_pos: ...}
->   cameras             = [{name, shape, dtype}]
+>   cameras             = [{name, shape, dtype, orientation}]
+>   server_applies_flip = yes | no | n/a  (n/a when image_preprocessing is none)
+>   camera_adapter      = Rotate180Cameras | FlipVerticalCameras | none
 >   instruction         = true | false
 >
 > NativeLayout input keys:  [list with source_kind and source_name]
@@ -379,6 +461,7 @@ Defer the driver import into `load()` so `profile.py` imports without
 >   wire constants      = [list]
 >   env overrides       = [list of (env var, field, type)]
 >   timeout_s           = ?
+>   concurrent_requests = ?
 > ```
 
 ---
@@ -410,8 +493,9 @@ if TYPE_CHECKING:
 SERVER_URL_ENV = "MY_SERVER_URL"
 
 _ENV_OVERRIDES: dict[str, tuple[str, type]] = {
-    "MY_TIMEOUT_S":     ("timeout_s",     float),
-    "MY_ACTION_STEPS":  ("action_steps",  int),
+    "MY_TIMEOUT_S":            ("timeout_s",           float),
+    "MY_ACTION_STEPS":         ("action_steps",        int),
+    "MY_CONCURRENT_REQUESTS":  ("concurrent_requests", int),
 }
 
 @dataclass(frozen=True)
@@ -423,6 +507,7 @@ class MyProfile:
     # wire convention fields
     action_steps: int
     timeout_s: float
+    concurrent_requests: int   # from CONTEXT.md; how many calls the server takes at once
     # ...more constants the driver needs
 
     def load(self, _weights: str, _device: str | None):
@@ -450,6 +535,7 @@ import httpx
 
 _READY_TIMEOUT_S = 540.0
 _READY_POLL_DELAY_S = 5.0
+_INFER_ATTEMPTS = 5
 
 class _HttpClient:
     def __init__(self, base_url: str, timeout_s: float):
@@ -473,16 +559,35 @@ class _HttpClient:
             time.sleep(_READY_POLL_DELAY_S)
 
     def infer(self, sample: dict[str, Any]) -> dict[str, Any]:
-        r = self._http.post("/infer", json=sample)  # or msgpack, per contract
-        r.raise_for_status()
-        return r.json()
+        # The server may scale down between episodes and come back
+        # under a new container. Retry so one cold start does not
+        # fail the episode.
+        delay = 1.0
+        for attempt in range(_INFER_ATTEMPTS):
+            try:
+                r = self._http.post("/infer", json=sample)  # or msgpack, per contract
+                if r.status_code >= 500 or r.status_code == 404:
+                    raise httpx.HTTPStatusError(
+                        f"server returned {r.status_code}", request=r.request, response=r
+                    )
+                r.raise_for_status()  # other 4xx: raise, do not retry
+                return r.json()
+            except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+                retryable = isinstance(exc, httpx.TransportError) or (
+                    exc.response.status_code >= 500 or exc.response.status_code == 404
+                )
+                if not retryable or attempt == _INFER_ATTEMPTS - 1:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 16.0)
 
 class MyEndpoint:
     def __init__(self, profile, server_url: str):
         self._profile = profile
         self.signature = profile.signature  # expose by identity, not copy
         self._client = _HttpClient(server_url, profile.timeout_s)
-        self._lock = threading.Lock()
+        # profile.concurrent_requests comes from CONTEXT.md, overridable via env
+        self._slots = threading.Semaphore(profile.concurrent_requests)
         config = self._client.config()
         self.camera_keys = tuple(config.get("camera_keys") or ())
         # ...store anything the session needs from /config
@@ -495,7 +600,7 @@ class MyEndpoint:
         return MySession(self)
 
     def forward(self, sample: dict[str, Any]) -> dict[str, Any]:
-        with self._lock:
+        with self._slots:
             return self._client.infer(sample)
 
 class SessionEndpoint(Protocol):
@@ -536,6 +641,7 @@ MYPOLICY_MYBENCH = MyProfile(
     output_layout=OUTPUT_LAYOUT,
     action_steps=20,
     timeout_s=180.0,
+    concurrent_requests=1,
     # ...more wire constants
 )
 
@@ -654,15 +760,38 @@ class _StubEndpoint:
 Session tests over the stub prove the delta conversion, gripper
 mapping, and history bookkeeping without a live server.
 
+### Composite benchmarks
+
+If `CONTEXT.md` or Phase 1 recorded `composite_benchmark = yes`, the
+run mixes episodes from several task groups. Each episode arrives
+with its own instruction string. The driver has to pick the right
+settings for that episode from that string. Settings that commonly
+differ between groups: action normalization statistics, the
+checkpoint or adapter name sent to the server, the task id.
+
+Do this in the session, at the start of each episode, using the
+longest-prefix rule from Phase 2. Put the lookup table in the
+profile. Write in the pairing file docstring which instruction
+patterns belong to which group and which settings each group uses.
+Then anyone reading the file can check the table against the
+benchmark without running it.
+
+Do not derive the group from a file name, a checkpoint name, or a
+count of tasks. Only the instruction string identifies the group.
+
 ### Endpoint hygiene
 
 - **Expose the profile's `SIGNATURE` object as `endpoint.signature`**,
   not a copy. The live check reads it by identity.
-- **Take a `threading.Lock` around `forward()`.** The server runs
-  one checkpoint on one GPU; concurrent shards queue here rather
-  than time each other out on the server.
-- **Keep nothing mutable on the endpoint.** Per-episode state goes
-  in the session.
+- **Take a `threading.Semaphore(N)` around `forward()`.** `N` is
+  `concurrent_requests` from `CONTEXT.md`, stored in the profile and
+  overridable via `_ENV_OVERRIDES`. When more than `N` runner shards
+  call at once, the extra ones wait here. Use
+  `N = 1` when the server handles one request at a time. Use a
+  larger `N` when the server has more than one replica; a plain
+  `threading.Lock` would leave the other replicas idle.
+- **Keep nothing mutable on the endpoint.** State for each episode
+  goes in the session.
 - **`endpoint.profile` must return the profile the endpoint was
   built from.** Missing this kills the connection pre-READY with
   `PairingRejected("policy rejected the pairing (no READY)")`.
@@ -803,10 +932,22 @@ edit the wrap to make the episodes match.
 - [ ] `SessionEndpoint` `Protocol` declared; session typed against it
 - [ ] `endpoint.signature` is the profile's object; `endpoint.profile`
       returns the profile
-- [ ] `threading.Lock` around `forward()`; nothing mutable on the
-      endpoint
+- [ ] `threading.Semaphore(concurrent_requests)` around `forward()`;
+      nothing mutable on the endpoint
+- [ ] `infer()` retries on transport errors, 5xx, and 404 with
+      backoff; raises on other 4xx
 - [ ] Env overrides for deployment-tunable knobs (timeout, action
-      steps, gripper convention)
+      steps, gripper convention, concurrent requests)
+- [ ] If the driver uses the instruction for any lookup: longest-prefix
+      match; each new instruction logged once; failed lookups log a
+      warning with the whole string
+- [ ] If the benchmark is composite: the session picks settings for
+      each episode from the instruction, and the table of
+      instruction patterns and their settings is in the pairing
+      docstring
+- [ ] Camera orientation in the signature matches
+      `image_preprocessing` from `CONTEXT.md`, and the pipeline has
+      the adapter from the `check_compatibility` report
 - [ ] Checks pass; `verify` zero failed (or documented exception);
       `not_checked` quoted in handoff
 - [ ] **Live run** ran at least 2 episodes without error, either
