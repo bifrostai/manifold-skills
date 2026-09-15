@@ -143,6 +143,15 @@ question you can answer here.
 - **Weight files.** Look for likely checkpoint folders in the project
   so you can propose them to the user rather than asking them to type
   a path from memory. Only relevant for the in-container-model branch.
+- **Image preprocessing.** Search the project source for a flip or
+  rotation applied to camera frames before inference. Patterns to
+  grep for: `[::-1]` on an image array, `np.flip`, `np.flipud`,
+  `np.fliplr`, `np.rot90`, `rotate(180)`, `transpose` on an image,
+  or a config flag such as `flip_images`. If you find one, note the
+  file and line and which orientation change it makes: flipped top
+  to bottom, flipped left to right, or rotated 180 degrees
+  (`img[::-1, ::-1]` is a 180-degree rotation). Skip the interview
+  question about this when the search finds something.
 - **Available benchmarks.** Run `manifold benchmark list` and note
   the slugs and one-line descriptions so you can present them as
   options in the interview.
@@ -158,6 +167,7 @@ question you can answer here.
 > docker_present          = yes | no
 > ml_framework            = ? | unknown
 > weight_dirs_seen        = [list, or empty]
+> image_preprocessing_found = none | flip_vertical | flip_horizontal | rotate_180  (file:line) | not_found
 > available_benchmarks    = [list of {slug, description}]
 > ```
 
@@ -208,6 +218,16 @@ of which branch is chosen.
   all of its suites. If none of the listed benchmarks fit, let the
   user name a different one, but flag that it must exist on the
   platform for a run to succeed.
+- **Image preprocessing.** Ask only when the Phase 1 search found
+  nothing. "Before your model sees a camera image, is the raw image
+  flipped or rotated?" Options: no change; flipped top to bottom;
+  flipped left to right; rotated 180 degrees; not sure. If the user
+  says the cameras differ, ask once for each camera. Explain in one
+  sentence why it matters: the benchmark sends images in a fixed
+  orientation, and the wrap has to convert them to match the training
+  images. The local checks do not test image orientation. If the
+  answer is wrong, the run scores near zero. If the user picks "not
+  sure," record `unknown`.
 
 Skip these unless the user brings them up: display name (defaults to
 the slug), visibility (defaults to `org`).
@@ -232,6 +252,11 @@ Ask these only if the user picked "Manifold loads and runs it":
 
 Ask these only if the user picked "the user's own server":
 
+- **Is the inference server already deployed and reachable?** If
+  not, record `endpoint_status = not_yet_deployed` in `CONTEXT.md`.
+  Tell the user in the handoff that the Manifold skills do not write
+  or deploy the server. They need to deploy it before running the
+  next skill.
 - **Endpoint URL.** The base URL the container will dial (for example
   `https://<user>--<app>.modal.run`). The user has this from wherever
   they deployed the server.
@@ -241,12 +266,11 @@ Ask these only if the user picked "the user's own server":
     URL, controlled by an allowlist of IP addresses or a private
     network. The user will need to allow the addresses Manifold's
     runners use.
-  - **Requires an API key or token in each request.** Flag this to
-    the user. Manifold does not currently have a safe place to
-    store that token, so the container cannot send it. The
-    workaround for now is to switch to "restricted by network"
-    instead. This will change when Manifold adds a way to pass
-    secrets to the container.
+  - **Requires an API key or token in each request.** The token goes
+    into the registered version's config as an environment variable
+    (`manifold policy init --env`). The platform stores it in
+    plaintext. Tell the user this. Network restriction is the safer
+    option when the user can arrange it.
 - **Request and response format.** A one or two sentence summary
   from the user or their setup notes. What HTTP route describes
   the loaded checkpoint (for example `GET /config`), what HTTP
@@ -255,6 +279,11 @@ Ask these only if the user picked "the user's own server":
   msgpack, a custom variant). The full details are Phase 1 work
   for the wrap skill. This is just enough to record which server
   the wrap will target.
+- **How many requests can the server handle at once?** One, if the
+  server runs one model on one GPU with no replicas. More, if it
+  runs several replicas. If the user is not sure, record `1`. The
+  wrap uses this number to cap how many benchmark runners call the
+  server at the same time.
 
 > **Phase 2 checkpoint (both branches):**
 > ```
@@ -263,6 +292,7 @@ Ask these only if the user picked "the user's own server":
 > registry_url        = ?
 > registry_namespace  = ?
 > benchmarks          = [list]
+> image_preprocessing = none | flip_vertical | flip_horizontal | rotate_180 | unknown  (source: file:line | user)
 > display_name        = ? | default (slug)
 > visibility          = ? | default (org)
 > ```
@@ -276,9 +306,11 @@ Ask these only if the user picked "the user's own server":
 >
 > **Additional (branch B, hosted_endpoint):**
 > ```
+> endpoint_status     = deployed | not_yet_deployed
 > endpoint_url        = ?
 > auth_situation      = open | network_restricted | header_token
 > wire_contract       = ? (one or two sentences)
+> concurrent_requests = ? (1 if unsure)
 > ```
 
 ---
@@ -306,8 +338,10 @@ Runtime and Policies sections depend on the branch.
 - `## Runtime`. GPU / CUDA / Docker facts you detected, plus how the
   user typically deploys this container.
 - `## Policies`. One `### <policy-name>` per policy, with display
-  name, visibility, GPU memory needed, benchmarks paired with, and
-  a **Weights** paragraph (location and any auth notes).
+  name, visibility, GPU memory needed, benchmarks paired with, an
+  **Image preprocessing** line (the value and where it came from:
+  a file and line, or the user's answer), and a **Weights**
+  paragraph (location and any auth notes).
 
 ### Branch B: hosted endpoint
 
@@ -316,10 +350,13 @@ Runtime and Policies sections depend on the branch.
   detected still go here (the container is still built and pushed).
   Note that no GPU is needed on the build machine or on the runner.
 - `## Policies`. One `### <policy-name>` per policy, with display
-  name, visibility, benchmarks paired with, and an **Endpoint**
-  paragraph. The Endpoint paragraph records the URL, how the
-  endpoint is secured, and the one-line summary of the request and
-  response format. No Weights paragraph in this branch.
+  name, visibility, benchmarks paired with, an **Image
+  preprocessing** line (the value and where it came from), and an
+  **Endpoint** paragraph. In the Endpoint paragraph, write whether
+  the server is deployed yet, the URL, how the endpoint is secured,
+  the one-line summary of the request and response format, and how
+  many requests the server handles at once. No Weights paragraph in
+  this branch.
 
 Add new sections when something is worth recording that doesn't fit
 above. For example, a `## Cloud storage` section if the weights live
@@ -387,8 +424,12 @@ wants to change something in `CONTEXT.md` first, stop and wait.
 - [ ] Project has a file listing its dependencies (if not, stopped
       and told the user)
 - [ ] Cheap lookups (package manager, GPU, Docker, source folders,
-      framework, `manifold benchmark list`) done without asking; user
-      asked only for what is hard or user-only
+      framework, image preprocessing, `manifold benchmark list`)
+      done without asking; user asked only for what is hard or
+      user-only
+- [ ] `image_preprocessing` recorded with its source (file and line,
+      or the user's answer); `unknown` only if the user said "not
+      sure"
 - [ ] User interview happened upfront, in at most two rounds, via
       the structured question tool (or fallback). Round 1 asked the
       branch question and the common answers; Round 2 asked the
