@@ -11,9 +11,9 @@ compatibility: >
   `/wrap-remote-policy` has written the wrap files under
   `<project>/.manifold/<slug>/`. Requires docker, a push credential
   for the target container registry (ghcr by default), and the
-  Manifold MCP server available so the skill can call
-  `register_policy_version` with `config.env`. Input is a wrap that
-  passes check_compatibility and verify under wrap-remote-policy.
+  `manifold` CLI (0.0.4 or later, for `policy init --env`). Input is
+  a wrap that passes check_compatibility and verify under
+  wrap-remote-policy.
 ---
 
 ## Summary
@@ -35,9 +35,8 @@ The output is four things:
    `ghcr.io/<org>/policy-<slug>-<benchmark>:0.1.0`).
 4. **A registered policy version** on the Manifold platform, with the
    endpoint URL in its `config.env` and `minimum_gpu_memory_gb: 0`.
-   Registered via the Manifold MCP server's `register_policy_version`
-   tool, because that path carries `config.env`; the `manifold policy
-   init` CLI does not today.
+   Registered with `manifold policy init --env KEY=VALUE
+   --minimum-gpu-memory-gb 0`.
 
 Files 1 and 2 are new files on disk. The other two live on the
 registry and on the platform.
@@ -182,8 +181,10 @@ Consequences for the remote case:
 1. **One image per wrap.** The `CMD` in the Dockerfile picks which
    wrap the container serves. Registration cannot override it.
 2. **Tags become versions.** Registration reads the image tag and
-   uses it as the version string. Never reuse a tag; old tags are
-   immutable.
+   uses it as the version string. Re-running `manifold policy init`
+   on an existing tag overwrites that version's config in place.
+   Bump the tag anyway for every rebuild, so each run on the
+   platform maps to exactly one image build.
 3. **The runner injects `config.env` at container start.** The env
    map from the registered version becomes environment variables in
    the container. The driver reads the endpoint URL from one of
@@ -243,10 +244,13 @@ Only the endpoint URL is required at registration; overrides are
 optional and can be added later.
 
 **The auth model** from `CONTEXT.md`. If the endpoint needs a header
-token, flag it. `config.env` is not a secret store today, so the
-practical answer is a network restriction on the endpoint (IP
-allowlist to the runner's egress, or VPC-internal). If the user has
-not arranged that, stop and ask them to before registration.
+token, read `driver.py` and record the env var names the driver
+reads the token from (for example `MODAL_KEY` and `MODAL_SECRET`).
+These go into the registered version's `config.env` next to the
+URL. The platform stores `config.env` in plaintext. Tell the user
+this before registration. If the user can restrict the endpoint by
+network instead (IP allowlist to the runner's egress, or
+VPC-internal), that is the safer option.
 
 **The benchmark decoders the image needs.** Look at the benchmark's
 sensors. If the benchmark ships colored frames as JPEG, the image
@@ -265,6 +269,7 @@ error the moment the pack tries to decode.
 > endpoint_url_env      = ?  (for example MY_SERVER_URL)
 > tunable_env_vars      = [list, or empty]
 > auth_model            = open | network_restricted | header_token
+> auth_env_vars         = [list, or empty]  (token env vars the driver reads)
 > network_restriction_arranged = yes | no | n/a
 > benchmark_decoders    = [list, for example httpx, pillow]
 > ```
@@ -314,13 +319,12 @@ Skip every "fetch or bake" decision from the in-container-model case.
 
 ### Auth to the endpoint
 
-Not baked into the image, not in `config.env`. The Manifold platform
-does not currently give the container a secret store, so anything
-requiring a secret at run time must be handled by a network
-restriction on the endpoint (IP allowlist, VPC-internal). If the
-endpoint needs a header token today, the answer is to drop the token
-and add the network restriction instead, until a runner-side secret
-channel exists.
+Never bake a token into the image. If the endpoint needs a header
+token, it goes into the registered version's `config.env` and the
+driver reads it from the environment at start. The platform stores
+`config.env` in plaintext. Say this to the user in Phase 4 before
+registering. A network restriction on the endpoint (IP allowlist,
+VPC-internal) is the safer option when the user can arrange it.
 
 > **Phase 2 checkpoint:**
 > ```
@@ -328,7 +332,7 @@ channel exists.
 > deps_in_image       = manifold-sdk (pinned), httpx (pinned), pillow (pinned, if needed)
 > project_source      = none (wrap does not import from it)
 > weights             = none (server holds the checkpoint)
-> auth_strategy       = network_restriction (endpoint accepts unauthenticated from runner IPs)
+> auth_strategy       = network_restriction | token_in_config_env | none
 > ```
 
 ---
@@ -406,6 +410,13 @@ docker build -f <path-to-Dockerfile> \
 A clean `docker build` means the image assembled without errors,
 nothing more. The driver has not run yet.
 
+**Any edit under `.manifold/<slug>/` after the build makes the image
+stale.** The image holds a copy of the driver, the profile, and the
+pairing file from the moment of the build. If you change any of
+them (for example, adding token headers to the driver), rebuild,
+bump the tag, push, and register again. Never tell the user a
+rebuild is unnecessary after a source edit.
+
 ### Run it locally
 
 CPU-only local runs are meaningful for a remote wrap. The container
@@ -482,42 +493,34 @@ the image, the run just looks broken.
 
 ## Phase 4: Register with env, then offer a test run
 
-Register the image via the Manifold MCP server's
-`register_policy_version` tool, because that path carries
-`config.env`. The `manifold policy init` CLI does not today, so the
-CLI is not the right entry point for a remote wrap.
-
-Then ask the user whether to submit a scored test run. Do not
-submit one on your own.
+Register the image with the `manifold` CLI. Then ask the user
+whether to submit a scored test run. Do not submit one on your own.
 
 ### Register
 
 **Ask the user to confirm the slug, version, image name, and
-endpoint URL before calling the tool.** Registration creates a
-catalog entry for their organization, and the tag becomes an
-immutable version string.
+endpoint URL before running the command.** Registration creates a
+catalog entry for their organization, and the tag becomes the
+version string.
 
-Call `register_policy_version` with a payload like:
-
-```json
-{
-  "organization": "<org>",
-  "slug": "<slug>",
-  "version": "<tag>",
-  "adapter": "container",
-  "config": {
-    "image": "<registry>/<namespace>/policy-<slug>:<tag>",
-    "env": {
-      "MY_SERVER_URL": "<endpoint-url>"
-    }
-  },
-  "minimum_gpu_memory_gb": 0
-}
+```sh
+manifold policy init <slug> \
+    --image <registry>/<namespace>/policy-<slug>:<tag> \
+    --minimum-gpu-memory-gb 0 \
+    --env MY_SERVER_URL=<endpoint-url>
 ```
 
-The image tag becomes the version. So a payload with
-`"image": ".../policy-mypolicy-mybench:0.1.0"` registers version
-`0.1.0`.
+The image tag becomes the version. So `--image
+.../policy-mypolicy-mybench:0.1.0` registers version `0.1.0`.
+
+**`--env` replaces the whole env map.** It does not merge with an
+earlier registration. Pass every key the driver reads on every
+call: the URL, any token vars, any tunable overrides. If you re-run
+the command with only one `--env`, the others are gone.
+
+**Re-running on the same tag overwrites the version's config in
+place.** This is how you fix a wrong URL without a rebuild. It does
+not update the image. After a source edit, rebuild (see Phase 3).
 
 **`minimum_gpu_memory_gb: 0`.** The container has no GPU work to
 do, and 0 lets placement take a GPU-less runner instead of
@@ -527,13 +530,15 @@ it.
 
 **Add tunable overrides only if the user asked for them.** If the
 user wants to change a timeout or a chunk stride at registration
-time, add the matching env var to `config.env` (for example
-`"MY_TIMEOUT_S": "240"`). Otherwise leave `config.env` with just
-the endpoint URL.
+time, add another `--env` (for example `--env MY_TIMEOUT_S=240`).
+Otherwise pass only the endpoint URL and any auth vars.
 
-**Auth caveat.** `config.env` is not a secret store. If the endpoint
-needs a token, do not put it here. Restrict the endpoint by
-network (IP allowlist, VPC-internal) instead.
+**Auth caveat.** If the endpoint needs a header token, pass the
+token vars with `--env` (for example `--env MODAL_KEY=... --env
+MODAL_SECRET=...`). The platform stores `config.env` in plaintext.
+Tell the user this before running the command. If the user would
+rather not store the token, restrict the endpoint by network (IP
+allowlist, VPC-internal) instead and drop the token vars.
 
 **Visibility.** By default a new policy is visible only to its own
 organization. Only make it public if the user asks for it.
@@ -613,11 +618,29 @@ means a wrap bug until proven otherwise. Go back to
 `/wrap-remote-policy` Phase 3, fix the driver, bump the tag, and
 re-enter this skill at Phase 3.
 
+**Composite benchmarks.** If the benchmark mixes several task
+groups (for example `libero-plus`), do not stop at the overall
+score. Break it down by task group. Use the episode list from
+`manifold run get <run-id> --episodes` and group episodes by their
+instruction prefix. One group scoring near zero while the others
+score normally means the driver picked the wrong settings for that
+group. Read the run logs for the driver's lookup warnings (see
+wrap-remote-policy Phase 1, "Instruction strings"). If any appear,
+the instruction matching is wrong. Fix it in the driver, rebuild,
+bump the tag, and run again.
+
 ### If the run fails on connection to the endpoint
 
 The container printed a driver error and exited, or all requests
 returned 5xx. Check:
 
+- **Zero episodes completed, and the log shows a connection timeout
+  (`Errno 110`) on the very first request.** The runner could not
+  reach the endpoint at all. If `curl <url>/config` works from
+  another machine and nothing in the wrap changed since the last
+  successful run, this is a runner placement or networking problem
+  on the platform. Report it to the Bifrost team with the run ID.
+  Do not change the wrap.
 - The endpoint URL in `config.env` is right (typo, missing
   scheme, trailing slash).
 - The endpoint is up and its description route responds. Test it
@@ -680,8 +703,9 @@ Inputs
       wrap was written against
 - [ ] Endpoint URL env var identified from `profile.py`
 - [ ] Tunable env vars listed (may be empty)
-- [ ] Auth model recorded; if `header_token`, network restriction
-      arranged on the endpoint before registration
+- [ ] Auth model recorded; if `header_token`, the token env vars are
+      listed and the user was told `config.env` is stored in
+      plaintext
 
 Image contents
 
@@ -709,14 +733,17 @@ Dockerfile rules
 
 Push and register
 
-- [ ] Tag never reused; Dockerfile and launcher saved before push
+- [ ] Tag bumped for every rebuild; Dockerfile and launcher saved
+      before push
+- [ ] Image rebuilt after any edit under `.manifold/<slug>/`; the
+      user was never told a rebuild was unnecessary after a source
+      edit
 - [ ] Push confirmed by the user
 - [ ] Registry package visible so the platform can pull the image
-- [ ] Registration went through `register_policy_version` (MCP
-      tool), not the `manifold policy init` CLI, because the CLI
-      does not carry `config.env`
-- [ ] `config.env` has the endpoint URL, plus any tunable
-      overrides the user asked for
+- [ ] Registered with `manifold policy init --env ...
+      --minimum-gpu-memory-gb 0`
+- [ ] Every `--env` key passed on every registration call: endpoint
+      URL, token vars if any, tunable overrides the user asked for
 - [ ] `minimum_gpu_memory_gb` is `0`
 - [ ] User was offered a scored test run and given the choice
 
@@ -724,8 +751,11 @@ If the user asked for a test run:
 
 - [ ] Benchmark chosen by the user; submit confirmed before running
 - [ ] Test run completed; score compared to reference
+- [ ] If the benchmark is composite: score broken down by task
+      group; run logs checked for lookup warnings
 - [ ] First frames and action ranges inspected
 - [ ] Connection failures diagnosed against the endpoint (URL, up,
-      allowlisted, codec) rather than assumed to be wrap bugs
+      allowlisted, codec); zero episodes with `Errno 110` on the
+      first request reported to Bifrost with the run ID
 - [ ] If a fix was applied: image re-tagged and pushed, new tag
-      re-registered with the same `config.env`
+      re-registered with every `--env` key
