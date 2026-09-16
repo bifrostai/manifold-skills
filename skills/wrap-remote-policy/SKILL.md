@@ -1,11 +1,10 @@
 ---
 name: wrap-remote-policy
 description: >
-  Wrap a policy that runs on the user's own inference server (Modal
-  endpoint, private HTTPS box) for the Manifold
-  platform. Write a driver that dials that server, plus the profile and
-  pairing that pass check_compatibility and verify. Use when the model
-  does not load in the built container.
+  Wrap a policy that runs on the user's own inference server for
+  the Manifold platform. Write a driver that dials that server,
+  plus the profile and pairing that pass check_compatibility and
+  verify. Use when the model does not load in the built container.
 compatibility: >
   Run from the user's policy project directory, after `/setup-manifold`
   has written `<project>/.manifold/CONTEXT.md` with `model_runtime =
@@ -86,6 +85,12 @@ benchmarks of interest, the endpoint URL, the auth situation, and
 the wire contract summary. Read that file before asking the user
 anything else; ask only about details `CONTEXT.md` does not already
 cover.
+
+**Load provider-specific guidance.** If `CONTEXT.md` or the user
+identifies the hosting platform, check `references/` for a file
+named after that platform and read it. The file contains
+platform-specific patterns that affect how you write the wrap. If no
+matching file exists, the general rules in this file are sufficient.
 
 **Jobs setup-manifold delegated to this skill.** setup-manifold wrote
 `CONTEXT.md` and nothing else. Once you've read it, do these before
@@ -179,12 +184,10 @@ this. If it does not, stop and ask the user for it; do not guess.
 
 **Check that both routes share one base URL.** The driver reads one
 URL from the environment and sends every request to a path under
-it. On Modal, each `@modal.web_endpoint` function gets its own
-hostname, so `/config` and `/infer` written as two functions end up
-on two URLs. The server has to expose one `@modal.asgi_app()` that
-serves `/config`, `/infer`, and `/health`. If the routes are on
-different hosts, stop and tell the user to restructure the server
-before the wrap is written.
+it. All routes (`/config`, `/infer`, `/health`) must be reachable
+under one hostname. If the routes are on different hosts, stop and
+tell the user to restructure the server before the wrap is written.
+Some hosting platforms split routes across hostnames by default.
 
 **Note the wire encoding.** JSON, msgpack, msgpack-numpy, protobuf,
 custom. If msgpack-numpy: check whether it is the PyPI package's

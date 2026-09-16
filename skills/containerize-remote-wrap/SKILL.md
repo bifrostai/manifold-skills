@@ -107,6 +107,12 @@ user anything; ask only about details it does not cover. If
 user this skill is for hosted-endpoint policies; `/containerize-wrap`
 is the one for in-container models.
 
+**Load provider-specific guidance.** If `CONTEXT.md` or the user
+identifies the hosting platform, check `references/` for a file
+named after that platform and read it. The file contains
+platform-specific patterns that affect registration and auth. If no
+matching file exists, the general rules in this file are sufficient.
+
 **Write into `.manifold/<slug>/`.** The `Dockerfile` and `serve.py`
 this skill produces both live under
 `<project>/.manifold/<slug>/`, next to the wrap files. `docker
@@ -245,12 +251,12 @@ optional and can be added later.
 
 **The auth model** from `CONTEXT.md`. If the endpoint needs a header
 token, read `driver.py` and record the env var names the driver
-reads the token from (for example `MODAL_KEY` and `MODAL_SECRET`).
-These go into the registered version's `config.env` next to the
-URL. The platform stores `config.env` in plaintext. Tell the user
-this before registration. If the user can restrict the endpoint by
-network instead (IP allowlist to the runner's egress, or
-VPC-internal), that is the safer option.
+reads the token from (for example `MY_AUTH_KEY` and
+`MY_AUTH_SECRET`). These go into the registered version's
+`config.env` next to the URL. The platform stores `config.env` in
+plaintext. Tell the user this before registration. If the user can
+restrict the endpoint by network instead (IP allowlist to the
+runner's egress, or VPC-internal), that is the safer option.
 
 **The benchmark decoders the image needs.** Look at the benchmark's
 sensors. If the benchmark ships colored frames as JPEG, the image
@@ -534,8 +540,8 @@ time, add another `--env` (for example `--env MY_TIMEOUT_S=240`).
 Otherwise pass only the endpoint URL and any auth vars.
 
 **Auth caveat.** If the endpoint needs a header token, pass the
-token vars with `--env` (for example `--env MODAL_KEY=... --env
-MODAL_SECRET=...`). The platform stores `config.env` in plaintext.
+token vars with `--env` (for example `--env MY_AUTH_KEY=... --env
+MY_AUTH_SECRET=...`). The platform stores `config.env` in plaintext.
 Tell the user this before running the command. If the user would
 rather not store the token, restrict the endpoint by network (IP
 allowlist, VPC-internal) instead and drop the token vars.
