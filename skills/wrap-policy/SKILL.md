@@ -196,6 +196,33 @@ embodiment mismatch.
 **Note observation preprocessing:** resizes, flips, channel swaps, frame
 stacking, proprio re-encoding, normalization.
 
+**Declare camera orientation relative to the real scene. Do not declare
+it relative to another step in the pipeline.** Ask: if a person stood in
+the scene, how would this image look to them? `UPRIGHT` means the image
+looks correct. `FLIPPED_VERTICAL` means the image is upside down, because
+the rows are in reverse order. If you declare an orientation using the
+wrong reference, the checks will still pass, and the policy will score
+near zero.
+
+**If the target benchmark is based on MuJoCo or LIBERO, confirm the
+orientation of the training data before you design the signature.** Do not
+trust code comments. Comments about LIBERO orientation contradict each
+other across the ecosystem. The common LIBERO training sets (OpenVLA RLDS,
+HuggingFaceVLA/libero) were rotated 180 degrees during conversion, so their
+images are horizontally mirrored relative to the real scene. Confirm the
+orientation in one of two ways:
+
+- Trace the training data. Find the dataset that was used to train the
+  checkpoint, open a few sample frames, and look for printed text or an
+  object with a known left and right side. If text in the frames is
+  mirrored, the images are mirrored. Do not judge by gravity alone. A
+  mirrored scene still looks normal.
+- Ask the user. If the user does not know and you cannot reach the
+  dataset, stop. Guessing the orientation is the known cause of LIBERO
+  scores near zero.
+
+Record the answer, and the evidence for it, in the Phase 1 checkpoint.
+
 ### Benchmark side
 
 **Find the target Manifold benchmark** in `manifold.benchmarks` (e.g. LIBERO,
@@ -221,14 +248,15 @@ must be authored first.
 >   exec_steps        = ?  (source: file:line)
 >   normalization     = yes|no, location: ?
 >   checkpoint        = ?
->   cameras           = [{name, shape}]
+>   cameras           = [{name, shape, orientation}]
+>   orientation_evidence = dataset sample | user answer  (REQUIRED for MuJoCo/LIBERO targets; unknown -> stop)
 >   instruction       = true|false
 >   proprioception    = ee_pose|joint_pos|none
 >
 > Benchmark side:
 >   target_benchmark  = LIBERO|SIMPLER|ROBOCASA|...
 >   embodiment_action = {type, rotation, gripper, delta, frame}
->   cameras_published = [{name, shape}]
+>   cameras_published = [{name, shape, orientation}]
 >   instruction       = true|false
 >
 > Feasible: true|false  (if false: why, and stop)
@@ -599,6 +627,12 @@ for each kind of mismatch:
 | `delta` (chunked) | open problem, flag it |
 | `frame` (action) | no adapter, needs kinematics, STOP |
 | joint ↔ EE | STOP: different controller |
+
+Both orientation values describe the image relative to the real scene. The
+adapter converts from the benchmark's declared orientation to the policy's
+declared orientation. `verify` cannot test orientation with synthetic data,
+so the policy's declared orientation must come from the evidence in the
+Phase 1 checkpoint. Do not guess it.
 
 ### Run the wrap (MANDATORY)
 
