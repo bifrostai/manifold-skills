@@ -231,6 +231,31 @@ inference. Use it to pick the camera adapter for the pipeline
 designing the signature. Do not guess. The local checks do not test
 image orientation.
 
+**Declare orientation relative to the real scene. Do not declare it
+relative to another step in the pipeline.** Ask: if a person stood in the
+scene, how would this image look to them? If you declare an
+orientation using the wrong reference, the checks will still pass,
+and the policy will score near zero.
+
+**If the target benchmark is based on MuJoCo or LIBERO, confirm the
+orientation of the training data.** Do not trust code comments.
+Comments about LIBERO orientation contradict each other across the
+ecosystem. The common LIBERO training sets (OpenVLA RLDS,
+HuggingFaceVLA/libero) were rotated 180 degrees during conversion,
+so their images are horizontally mirrored relative to the real
+scene. Confirm the orientation in one of two ways:
+
+- Trace the training data. Find the dataset that was used to train
+  the checkpoint, open a few sample frames, and look for printed
+  text or an object with a known left and right side. If text in
+  the frames is mirrored, the images are mirrored. Do not judge by
+  gravity alone. A mirrored scene still looks normal.
+- Ask the user. If the user does not know and you cannot reach the
+  dataset, stop.
+
+Record the answer, and the evidence for it, in the Phase 1
+checkpoint.
+
 **Note the action convention the server emits.** Absolute pose or
 delta pose. Rotation format. Gripper polarity and range. Chunk size
 and the frame rate the chunk was trained at. Where you send state
@@ -285,6 +310,7 @@ the warning.
 >   chunk_hz           = ?  (frame rate the chunk was trained at)
 >   state_window       = ?  (rows of history the server reads)
 >   image_preprocessing = none | flip_vertical | flip_horizontal | rotate_180  (from CONTEXT.md; stop if unknown)
+>   orientation_evidence = dataset sample | user answer  (REQUIRED for MuJoCo/LIBERO targets; unknown -> stop)
 >
 > Benchmark side:
 >   target_benchmark   = LIBERO | SIMPLER | ROBOCASA | ...
@@ -339,8 +365,8 @@ Anything else is benchmark work, not a wrap.
   crash at run time.
 - Describe cameras as what the driver actually forwards. Include
   extra dimensions from frame stacking if the server needs them.
-- Set each camera's `orientation` to the orientation the server
-  expects to receive. Read `image_preprocessing` from `CONTEXT.md`
+- Set the camera `orientation` to what the server expects to
+  receive. Read `image_preprocessing` from `CONTEXT.md`
   and then read the server code to see whether the server applies
   that flip itself before inference. Two cases:
   - The server applies the flip. Declare the benchmark's
@@ -795,8 +821,9 @@ count of tasks. Only the instruction string identifies the group.
   `threading.Lock` would leave the other replicas idle.
 - **Keep nothing mutable on the endpoint.** State for each episode
   goes in the session.
-- **`endpoint.profile` must return the profile the endpoint was
-  built from.** Missing this kills the connection pre-READY with
+- **`endpoint.profile` must return the same profile object that
+  was used to build the endpoint.** Missing this kills the
+  connection pre-READY with
   `PairingRejected("policy rejected the pairing (no READY)")`.
 
 ### Check the wrap
