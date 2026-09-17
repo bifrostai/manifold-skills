@@ -30,17 +30,17 @@ manager, plus a set of fields that changes with the model runtime.
 The interview asks first where the model runs, then branches to the
 follow-up questions that fit that answer. Two possible answers:
 
-- **Manifold loads and runs the model.** The user gives Manifold
-  the model weights (as a file on disk, or a reference to a hosted
-  model). Each run loads the weights into GPU memory on Manifold's
-  machines.
-  Next skill: `/wrap-policy`, then `/containerize-wrap`.
 - **The model already runs on the user's own server. Manifold
   calls it.** The user keeps an inference server up somewhere
   (Modal endpoint, private HTTPS box). Manifold sends observations
   to it over the network and reads back the actions. No GPU is
   needed on Manifold's side.
   Next skill: `/wrap-remote-policy`, then `/containerize-remote-wrap`.
+- **Manifold loads and runs the model.** The user gives Manifold
+  the model weights (as a file on disk, or a reference to a hosted
+  model). Each run loads the weights into GPU memory on Manifold's
+  machines.
+  Next skill: `/wrap-policy`, then `/containerize-wrap`.
 
 The follow-up questions and the sections written into `CONTEXT.md`
 depend on that answer.
@@ -183,14 +183,14 @@ Ask these together, in one prompt to the user. They apply regardless
 of which branch is chosen.
 
 - **Where does the model run when Manifold uses it?** Options:
-  - **Manifold loads and runs it.** The user gives Manifold the
-    model weights (as a file on disk, or a reference to a hosted
-    model). Manifold loads them into GPU memory on their machines
-    each run.
   - **The user already runs it on their own server. Manifold calls
     it.** The user has an inference server up somewhere (a Modal
     endpoint, a private HTTPS box). Manifold sends observations to
     it over HTTPS and reads back the actions.
+  - **Manifold loads and runs it.** The user gives Manifold the
+    model weights (as a file on disk, or a reference to a hosted
+    model). Manifold loads them into GPU memory on their machines
+    each run.
 
   Ask the question in whatever plain-language wording fits the
   conversation; the exact phrasing above is not required. Avoid the
@@ -232,23 +232,7 @@ of which branch is chosen.
 Skip these unless the user brings them up: display name (defaults to
 the slug), visibility (defaults to `org`).
 
-### Round 2, branch A: in-container model
-
-Ask these only if the user picked "Manifold loads and runs it":
-
-- **How much GPU memory does the model use at inference, in GB?**
-  The user knows this from their own runs. The agent cannot
-  measure it without running the model.
-- **Where the model weights live.** If Phase 1 found candidate
-  folders, present them as options plus "elsewhere" (a hosted
-  model reference, cloud storage, or a path the user will type in).
-  The user picks or fills in the actual location.
-- **Where the user typically deploys this container.** Options: local
-  box, Modal (as compute), other cloud, none-yet.
-  This does not change what the container looks like; it is context
-  for later skills.
-
-### Round 2, branch B: hosted endpoint
+### Round 2, branch A: hosted endpoint
 
 Ask these only if the user picked "the user's own server":
 
@@ -285,6 +269,22 @@ Ask these only if the user picked "the user's own server":
   wrap uses this number to cap how many benchmark runners call the
   server at the same time.
 
+### Round 2, branch B: in-container model
+
+Ask these only if the user picked "Manifold loads and runs it":
+
+- **How much GPU memory does the model use at inference, in GB?**
+  The user knows this from their own runs. The agent cannot
+  measure it without running the model.
+- **Where the model weights live.** If Phase 1 found candidate
+  folders, present them as options plus "elsewhere" (a hosted
+  model reference, cloud storage, or a path the user will type in).
+  The user picks or fills in the actual location.
+- **Where the user typically deploys this container.** Options: local
+  box, Modal (as compute), other cloud, none-yet.
+  This does not change what the container looks like; it is context
+  for later skills.
+
 > **Phase 2 checkpoint (both branches):**
 > ```
 > policy_slug         = ?
@@ -297,20 +297,20 @@ Ask these only if the user picked "the user's own server":
 > visibility          = ? | default (org)
 > ```
 >
-> **Additional (branch A, in_container):**
-> ```
-> peak_vram_gb        = ?
-> weights_location    = ?
-> deployment_style    = ?
-> ```
->
-> **Additional (branch B, hosted_endpoint):**
+> **Additional (branch A, hosted_endpoint):**
 > ```
 > endpoint_status     = deployed | not_yet_deployed
 > endpoint_url        = ?
 > auth_situation      = open | network_restricted | header_token
 > wire_contract       = ? (one or two sentences)
 > concurrent_requests = ? (1 if unsure)
+> ```
+>
+> **Additional (branch B, in_container):**
+> ```
+> peak_vram_gb        = ?
+> weights_location    = ?
+> deployment_style    = ?
 > ```
 
 ---
@@ -333,17 +333,7 @@ Common sections (both branches):
 
 Runtime and Policies sections depend on the branch.
 
-### Branch A: in-container model
-
-- `## Runtime`. GPU / CUDA / Docker facts you detected, plus how the
-  user typically deploys this container.
-- `## Policies`. One `### <policy-name>` per policy, with display
-  name, visibility, GPU memory needed, benchmarks paired with, an
-  **Image preprocessing** line (the value and where it came from:
-  a file and line, or the user's answer), and a **Weights**
-  paragraph (location and any auth notes).
-
-### Branch B: hosted endpoint
+### Branch A: hosted endpoint
 
 - `## Runtime`. State that the built container does not load the
   model. It calls the user's inference server. Docker facts you
@@ -357,6 +347,16 @@ Runtime and Policies sections depend on the branch.
   the one-line summary of the request and response format, and how
   many requests the server handles at once. No Weights paragraph in
   this branch.
+
+### Branch B: in-container model
+
+- `## Runtime`. GPU / CUDA / Docker facts you detected, plus how the
+  user typically deploys this container.
+- `## Policies`. One `### <policy-name>` per policy, with display
+  name, visibility, GPU memory needed, benchmarks paired with, an
+  **Image preprocessing** line (the value and where it came from:
+  a file and line, or the user's answer), and a **Weights**
+  paragraph (location and any auth notes).
 
 Add new sections when something is worth recording that doesn't fit
 above. For example, a `## Cloud storage` section if the weights live
@@ -407,8 +407,8 @@ Manifold?"** Do not name the next skill.
 
 Pick the next skill from the branch:
 
-- Branch A (in-container model): the next skill is `/wrap-policy`.
-- Branch B (hosted endpoint): the next skill is `/wrap-remote-policy`.
+- Branch A (hosted endpoint): the next skill is `/wrap-remote-policy`.
+- Branch B (in-container model): the next skill is `/wrap-policy`.
 
 If the user says yes, invoke that skill. If the user says no, or
 wants to change something in `CONTEXT.md` first, stop and wait.
