@@ -97,19 +97,24 @@ matching file exists, the general rules in this file are sufficient.
 writing any wrap code:
 
 - Add `manifold-sdk` and `httpx` to the project's dependency file
-  **and** install them into the project's environment. With uv, one
-  command per package:
+  **and** install them into the project's environment. For
+  `manifold-sdk`, start with the most recent commit on the
+  `manifold-sdk` GitHub repository's default branch, then pin the
+  dependency to that commit's full SHA. With uv:
 
   ```
-  uv add "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git"
+  uv add "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git@<commit>"
   uv add httpx
   ```
 
-  With plain `requirements.txt`, append both lines to the file, then
-  run `pip install -r requirements.txt`. Recording without installing
+  With plain `requirements.txt`, add the same pinned Git URL and
+  `httpx`, then run `pip install -r requirements.txt`. Add a
+  **manifold-sdk revision** line with the full SHA to the policy's
+  `### <policy-name>` subsection in `.manifold/CONTEXT.md`. This
+  records the SDK revision used for the wrap's checks. Use the same
+  revision when building the container. Recording without installing
   (or the reverse) leaves the project half-set-up. If the install
-  fails on a dependency conflict, stop and hand the error to the
-  user.
+  fails on a dependency conflict, stop and hand the error to the user.
 - Create the folder `<project>/.manifold/<slug>/`. The slug is in
   `CONTEXT.md`. All wrap files below live inside it.
 
@@ -946,6 +951,9 @@ edit the wrap to make the episodes match.
 
 ## Final checklist
 
+- [ ] The policy's **manifold-sdk revision** line in
+      `.manifold/CONTEXT.md` records the full SDK commit SHA used for
+      the checks
 - [ ] `read_pairing` accepts the module without `httpx` on the path
 - [ ] `default_weights` is `""`; `load()` ignores both arguments and
       reads the endpoint URL from an env var

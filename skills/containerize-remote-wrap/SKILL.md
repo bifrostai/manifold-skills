@@ -208,8 +208,8 @@ Consequences for the remote case:
 ## Phase 1: Understand the inputs
 
 Do this before writing a Dockerfile. You need the wrap module path,
-the policy name, the manifold-sdk version, and the env vars the
-driver reads pinned down first.
+the policy name, the manifold-sdk revision, and the environment
+variables the driver reads pinned down first.
 
 **The wrap.** Confirm the wrap passes both `check_compatibility` and
 `verify` under `/wrap-remote-policy`. Record the module path that
@@ -231,11 +231,14 @@ do not ask the user to type it out.
 Examples below use `ghcr.io/<your-org>`. Substitute the actual
 registry and namespace throughout.
 
-**The manifold-sdk version.** Install the same manifold-sdk version
-the wrap was written against. Read it from the wrap's environment
-(`uv.lock`, `pyproject.toml`, or `uv pip freeze`). The policy and
-the benchmark exchange messages defined by the SDK, and mismatched
-versions can silently disagree at run time.
+**The manifold-sdk Git revision.** Read the **manifold-sdk revision**
+line from the policy's subsection in `.manifold/CONTEXT.md`. It is the
+full Git commit SHA installed when the wrap passed `check_compatibility`
+and `verify`. Install `manifold-sdk` from that revision instead of
+resolving the repository again. If the line is missing, return to
+`/wrap-remote-policy`. Start with the most recent commit on the
+`manifold-sdk` GitHub repository's default branch, then record its full
+SHA after the wrap passes both checks.
 
 **The endpoint URL env var.** Read `profile.py` and find the env
 var the driver reads to get the server URL (for example
@@ -271,7 +274,7 @@ error the moment the pack tries to decode.
 > policy_slug           = ?  (source: setup-manifold | user)
 > image_name            = <registry>/<namespace>/policy-<slug>:<tag>
 >                         (constructed by this skill from the slug)
-> sdk_version           = ?  (from wrap-remote-policy environment)
+> sdk_revision          = ?  (from the policy's manifold-sdk revision line)
 > endpoint_url_env      = ?  (for example MY_SERVER_URL)
 > tunable_env_vars      = [list, or empty]
 > auth_model            = open | network_restricted | header_token
@@ -300,10 +303,12 @@ The image contains, in this order:
    is a safe default. Debian, not Alpine: the runner probes the
    container's readiness with a bash `/dev/tcp` trick that busybox
    ash does not have.
-2. **manifold-sdk**, installed at the version the wrap was written
-   against. The recommended install path is the project's `uv.lock`
-   (exported to `requirements.txt` in a discarded stage), so the
-   image's dependency set matches the wrap's environment exactly.
+2. **manifold-sdk**, installed from the full Git commit SHA on the
+   policy's **manifold-sdk revision** line. In a discarded build stage,
+   export the project's `uv.lock` to `requirements.txt`. Install that
+   file in the image so its direct and transitive dependency versions
+   match the wrap environment. Keep the `manifold-sdk` entry pinned to
+   the recorded Git revision.
 3. **The driver's HTTP client and any benchmark decoders.** `httpx`
    for the transport. `pillow` if the target benchmark ships
    colored frames as JPEG (LIBERO does). Pin exact versions; do not
@@ -739,8 +744,8 @@ Inputs
       `/wrap-remote-policy`
 - [ ] Policy slug received from setup-manifold (not invented); image
       name constructed from it
-- [ ] manifold-sdk version in the image matches the version the
-      wrap was written against
+- [ ] manifold-sdk in the image is installed from the policy's
+      **manifold-sdk revision** in `.manifold/CONTEXT.md`
 - [ ] Endpoint URL env var identified from `profile.py`
 - [ ] Tunable env vars listed (may be empty)
 - [ ] Auth model recorded; if `header_token`, the token env vars are
@@ -754,7 +759,6 @@ Image contents
 - [ ] Built for `linux/amd64` (`docker buildx build --platform
       linux/amd64` on any arm64 machine, including Apple Silicon)
 - [ ] No CUDA base, no torch/jax, no model stack in the image
-- [ ] manifold-sdk installed at the wrap's pinned version
 - [ ] `httpx` installed at a pinned version
 - [ ] Benchmark decoders installed if the benchmark ships encoded
       frames (for example `pillow` for JPEG)

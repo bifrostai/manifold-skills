@@ -114,17 +114,19 @@ a GPU or switch to `/wrap-remote-policy`.
 writing any wrap code:
 
 - Add `manifold-sdk` to the project's dependency file **and** install
-  it into the project's environment, from the GitHub source. With uv,
-  one command does both:
+  it into the project's environment. Start with the most recent commit
+  on the `manifold-sdk` GitHub repository's default branch, then pin
+  the dependency to that commit's full SHA. With uv:
 
   ```
-  uv add "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git"
+  uv add "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git@<commit>"
   ```
 
-  With plain `requirements.txt`, do both steps: append the line
-  `manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git` to
-  the file, then run
-  `pip install "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git"`.
+  With plain `requirements.txt`, add the same pinned Git URL, then run
+  `pip install -r requirements.txt`. Add a **manifold-sdk revision**
+  line with the full SHA to the policy's `### <policy-name>` subsection
+  in `.manifold/CONTEXT.md`. This records the SDK revision used for the
+  wrap's checks. Use the same revision when building the container.
   Recording without installing (or the reverse) leaves the project
   half-set-up. If the install fails on a dependency conflict, stop and
   hand the error to the user.
@@ -735,6 +737,9 @@ edit the wrap to make the episodes match.
 
 ## Final checklist
 
+- [ ] The policy's **manifold-sdk revision** line in
+      `.manifold/CONTEXT.md` records the full SDK commit SHA used for
+      the checks
 - [ ] `read_pairing` accepts the module without the model stack
 - [ ] Action width: `expected_length()` == model source width
 - [ ] `chunk` and `exec_steps` spelled exactly so on the profile; endpoint
