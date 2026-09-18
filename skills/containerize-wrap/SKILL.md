@@ -178,7 +178,7 @@ Three consequences follow:
 ## Phase 1: Understand the inputs
 
 Do this before writing a Dockerfile. You need the wrap module path, the
-policy name, and the manifold-sdk version pinned down first.
+policy name, and the manifold-sdk revision pinned down first.
 
 **The wrap.** Confirm the wrap passes both `check_compatibility` and
 `verify` under `wrap-policy`. Record the module path that exports
@@ -200,11 +200,14 @@ to type it out.
 Examples below use `ghcr.io/<your-org>`. Substitute the actual registry
 and namespace throughout.
 
-**The manifold-sdk version.** Install the same manifold-sdk version the
-wrap was written against. Read it from the wrap's environment
-(`uv.lock`, `pyproject.toml`, or `uv pip freeze`). The policy and the
-benchmark exchange messages defined by the SDK, and mismatched versions
-can silently disagree at run time.
+**The manifold-sdk Git revision.** Read the **manifold-sdk revision**
+line from the policy's subsection in `.manifold/CONTEXT.md`. It is the
+full Git commit SHA installed when the wrap passed `check_compatibility`
+and `verify`. Install `manifold-sdk` from that revision instead of
+resolving the repository again. If the line is missing, return to
+`/wrap-policy`. Start with the most recent commit on the `manifold-sdk`
+GitHub repository's default branch, then record its full SHA after the
+wrap passes both checks.
 
 > **Phase 1 checkpoint.** Record before designing:
 > ```
@@ -213,7 +216,7 @@ can silently disagree at run time.
 > policy_slug      = ?  (source: setup-manifold | user)
 > image_name       = <registry>/<namespace>/policy-<slug>:<tag>
 >                    (constructed by this skill from the slug)
-> sdk_version      = ?  (from wrap-policy environment)
+> sdk_revision     = ?  (from the policy's manifold-sdk revision line)
 > ```
 
 ---
@@ -241,8 +244,9 @@ The image contains, in this order:
    `uv.lock`, or `uv pip install -r requirements.txt` if it only ships
    a requirements file. Fall back to whatever the project actually
    supports (conda env, raw `pip`) only if `uv` cannot handle it.
-3. **manifold-sdk**, installed on top with `uv pip install manifold-sdk`
-   at the version the wrap was written against.
+3. **manifold-sdk**, installed from the full Git commit SHA on the
+   policy's **manifold-sdk revision** line:
+   `uv pip install "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git@<commit>"`.
 4. **The parts of the project folder that the wrap imports from.**
    `driver.py` names what inference needs. Trace its imports (and
    their transitive imports) back to the folders they live in, and
@@ -262,7 +266,7 @@ If the folder is in git, pin the commit with a build `ARG` and check
 it out during build. If it isn't, snapshot the folder (a tarball
 saved somewhere durable) and record which snapshot the image was
 built from. Bumping that pin is a separate decision from bumping the
-manifold-sdk version.
+manifold-sdk revision.
 
 ### Weights: fetched or baked?
 
@@ -645,8 +649,8 @@ Inputs
 - [ ] Wrap passes `check_compatibility` and `verify` under `wrap-policy`
 - [ ] Policy slug received from setup-manifold (not invented); image
       name constructed from it
-- [ ] manifold-sdk version in the image matches the version the wrap
-      was written against
+- [ ] manifold-sdk in the image is installed from the policy's
+      **manifold-sdk revision** in `.manifold/CONTEXT.md`
 
 Image contents
 
