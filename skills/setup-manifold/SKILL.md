@@ -135,11 +135,24 @@ question you can answer here.
   whether `.manifold/` already exists (if so, read `CONTEXT.md`, tell
   the user what is already recorded, and ask whether they want to add
   a new policy or re-verify).
-- **The machine.** Check whether there is a GPU (CUDA version and
-  total VRAM if so), whether Docker is reachable, and which ML
-  framework is in the project's deps. These only matter for the
-  in-container-model branch; look them up anyway because they are
-  cheap.
+- **The machine.** Look up five things. Run `uname -s` for the OS and
+  `uname -m` for the CPU architecture. Run `nvidia-smi` to see
+  whether an NVIDIA GPU is present, and read its CUDA version and
+  total VRAM if there is one. Run `which docker`, then `docker info`,
+  to see whether Docker is reachable. Run `df -h` on the project's
+  filesystem for free disk, because you will build an image of 10 to
+  30 GB in a later skill. Read the project's dependency file for the
+  name of the ML framework.
+
+  Then decide one thing from those results: **can this machine load
+  and run the model?** A Linux machine with an NVIDIA GPU can run it.
+  macOS cannot, because CUDA does not run on macOS. A machine with no
+  NVIDIA GPU cannot run it either. Windows with an NVIDIA GPU is
+  uncertain: CUDA works there, but many robotics packages publish
+  Linux-only wheels, so ask the user whether their model stack runs
+  on Windows, and mention WSL2 as the usual route. For anything
+  else, ask the user instead of guessing. Record the answer as `can_run_model_locally`.
+  When the answer is no, follow the section after this phase.
 - **Weight files.** Look for likely checkpoint folders in the project
   so you can propose them to the user rather than asking them to type
   a path from memory. Only relevant for the in-container-model branch.
@@ -162,14 +175,64 @@ question you can answer here.
 > package_manager         = ?
 > manifold_folder_exists  = yes | no  (if yes: what does CONTEXT.md say?)
 > source_folders_seen     = [list]
+> os                      = linux | macos | windows | ?
+> arch                    = x86_64 | arm64 | ?
 > gpu_present             = yes | no
 > cuda_version            = ? | unknown
+> can_run_model_locally   = yes | no  (yes only on linux with an NVIDIA GPU)
 > docker_present          = yes | no
+> free_disk_gb            = ?
 > ml_framework            = ? | unknown
 > weight_dirs_seen        = [list, or empty]
 > image_preprocessing_found = none | flip_vertical | flip_horizontal | rotate_180  (file:line) | not_found
 > available_benchmarks    = [list of {slug, description}]
 > ```
+
+---
+
+## Tell the user what each path needs before they choose
+
+The branch question below asks where the model runs. The answer also
+decides what this machine needs to be able to do, and the user
+cannot see that from the question. State the machine facts while
+asking, in one or two plain sentences, whether
+`can_run_model_locally` is yes or no. For example, on a machine with
+no GPU:
+
+> There are two ways to connect your policy. The first is to keep
+> running it on your own server and let Manifold call it. That path
+> works fully from the machine you are on. The second is to give
+> Manifold your weights and let Manifold run the model. You can
+> prepare that from here too, but the test at the end of the next
+> step has to load your model on this machine, and this machine
+> cannot load it. The first full test would then happen on
+> Manifold's machines instead.
+
+Both answers stay open on any machine. The machine facts decide what
+you flag, not what the user may pick:
+
+- If the user picks in-container and the machine cannot run the
+  model, ask before continuing. One sentence of why, then the
+  question: the wrap cannot be tested on this machine because it has
+  no GPU, so do they want to proceed on this machine anyway? On a
+  yes, record `local_test_run_possible = no` in the Runtime section
+  of `CONTEXT.md` and continue. On a no, offer the two ways out.
+  First, switch to the hosted endpoint path: continue this same
+  interview on branch A, and the user deploys their model to their
+  own server before the next skill. Second, move to a Linux machine
+  with an NVIDIA GPU: stop here, and the user runs this skill again
+  on that machine. `/wrap-policy` reads that field back, skips its
+  test run, and repeats the warning in its handoff.
+- If the user picks in-container and the machine cannot build the
+  image, flag that too. The containerize step needs Docker and 10 to
+  30 GB of free disk. On an arm64 machine the CUDA image builds
+  under emulation, which is slow and can fail on GPU wheels, so tell
+  the user that this build works dependably on a Linux x86_64
+  machine.
+- If the user picks the hosted endpoint, the model never runs on
+  this machine, and no GPU is needed at any step. The machine still
+  needs Docker, because the containerize step builds a small image
+  that forwards requests to their server.
 
 ---
 
@@ -337,8 +400,10 @@ Runtime and Policies sections depend on the branch.
 
 - `## Runtime`. State that the built container does not load the
   model. It calls the user's inference server. Docker facts you
-  detected still go here (the container is still built and pushed).
-  Note that no GPU is needed on the build machine or on the runner.
+  detected still go here (the container is still built and pushed),
+  along with the CPU architecture, because the image has to be built
+  for linux/amd64. Note that no GPU is needed on this machine or on
+  the runner.
 - `## Policies`. One `### <policy-name>` per policy, with display
   name, visibility, benchmarks paired with, an **Image
   preprocessing** line (the value and where it came from), and an
@@ -350,8 +415,12 @@ Runtime and Policies sections depend on the branch.
 
 ### Branch B: in-container model
 
-- `## Runtime`. GPU / CUDA / Docker facts you detected, plus how the
-  user typically deploys this container.
+- `## Runtime`. The OS, CPU architecture, GPU, CUDA, and Docker
+  facts you detected, plus how the user typically deploys this
+  container. State whether this machine can load and run the model,
+  because `/wrap-policy` reads that back before it starts. If this
+  machine cannot run the model, write `local_test_run_possible = no`
+  here, so `/wrap-policy` knows to skip its test run.
 - `## Policies`. One `### <policy-name>` per policy, with display
   name, visibility, GPU memory needed, benchmarks paired with, an
   **Image preprocessing** line (the value and where it came from:
@@ -393,14 +462,18 @@ Summarize what was written:
 
 - The file created (`.manifold/CONTEXT.md`).
 - A one-line recap of the recorded context. For branch A: policy name,
-  registry, weights location, benchmarks of interest. For branch B:
-  policy name, registry, endpoint URL, benchmarks of interest.
+  registry, endpoint URL, benchmarks of interest. For branch B:
+  policy name, registry, weights location, benchmarks of interest.
 - Any prerequisites Phase 1 found missing that a later skill will
-  need. For branch A: Docker not installed or not reachable, or no
-  GPU on a machine where the deployment style needs one. For branch
-  B: Docker not installed or not reachable. Point the user at how to
-  install or arrange them (for example Docker's install docs) so they
-  can fix it before the next skill runs.
+  need. On both branches, say so if Docker is not installed or not
+  reachable. On branch B, give the user two more facts when they
+  apply. If this machine cannot run the model, `/wrap-policy` will
+  skip its test run, and the wrap stays untested until its first run
+  on Manifold. If this machine is arm64, the image must be built for
+  linux/amd64, which runs under emulation and can fail on GPU
+  wheels. Point the user at how to install or arrange each missing
+  piece (for example Docker's install docs) so they can fix it
+  before the next skill runs.
 
 Then ask something like: **"Ready to prepare your policy for use with
 Manifold?"** Do not name the next skill.
@@ -423,10 +496,16 @@ wants to change something in `CONTEXT.md` first, stop and wait.
       told the user to install and `manifold auth login`)
 - [ ] Project has a file listing its dependencies (if not, stopped
       and told the user)
-- [ ] Cheap lookups (package manager, GPU, Docker, source folders,
-      framework, image preprocessing, `manifold benchmark list`)
-      done without asking; user asked only for what is hard or
-      user-only
+- [ ] Cheap lookups (package manager, OS, CPU architecture, GPU,
+      Docker, source folders, framework, image preprocessing,
+      `manifold benchmark list`) done without asking; user asked
+      only for what is hard or user-only
+- [ ] `can_run_model_locally` decided from the OS and the GPU
+      result; told the user what hardware each answer needs while
+      asking the branch question
+- [ ] If this machine cannot run the model and the user picked the
+      in-container path, asked whether to proceed without a test
+      run; recorded `local_test_run_possible = no` only after a yes
 - [ ] `image_preprocessing` recorded with its source (file and line,
       or the user's answer); `unknown` only if the user said "not
       sure"

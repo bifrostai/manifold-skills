@@ -2,8 +2,9 @@
 name: wrap-policy
 description: >
   Wrap a researcher's policy for the Manifold platform, then prove it with
-  check_compatibility, verify, and a live run of the driver. Use when the
-  model loads into the built container. For policies where the model
+  check_compatibility, verify, and a live run of the driver (the live run
+  is skipped, with the user's consent, on a machine that cannot run the
+  model). Use when the model loads into the built container. For policies where the model
   runs on the user's own inference server (Modal, private HTTPS box),
   use `/wrap-remote-policy` instead.
 compatibility: >
@@ -39,7 +40,9 @@ Your task is complete when both `check_compatibility` and `verify` pass AND
 the wrap runs cleanly under `evaluate`. The two checks pass specs and dummy
 data through the PIPELINE only. Any wrong gripper polarity, action width, or
 proprioception can pass them but crash (or fail silently) at runtime, which
-is why the live `evaluate` run is mandatory.
+is why the live `evaluate` run is mandatory. One exception: on a machine
+that cannot run the model, the task is complete when both checks pass, the
+`evaluate` run is skipped, and the handoff says so (see "Run the wrap").
 
 ## Rules
 
@@ -86,6 +89,25 @@ cover.
 `model_runtime = hosted_endpoint`, this skill is the wrong one. Stop
 and point the user at `/wrap-remote-policy`, which handles wraps for
 policies that run on the user's own inference server.
+
+**Check whether this machine can run the model, before Phase 1.**
+Phase 3 finishes with a test run that loads the user's real
+checkpoint, and that run needs Linux and an NVIDIA GPU. No earlier
+step needs a GPU. `CONTEXT.md` records the answer as
+`can_run_model_locally`, and records `os`, `arch`, and `gpu_present`
+next to it. If the file predates those fields, run the lookups
+yourself: `uname -s`, `uname -m`, `nvidia-smi`.
+
+A machine that cannot run the model does not block the wrap, but the
+user decides. If `CONTEXT.md` already records
+`local_test_run_possible = no`, the user said yes to this during
+`/setup-manifold`. Restate it in one sentence and continue. If the
+field is absent, ask now: the wrap cannot be tested on this machine
+because it has no GPU, so do they want to proceed anyway? On a yes,
+record `local_test_run_possible = no` in `CONTEXT.md`, write the
+wrap, run both checks, and skip the test run as described under
+"Run the wrap". On a no, stop, and help them move to a machine with
+a GPU or switch to `/wrap-remote-policy`.
 
 **Jobs setup-manifold delegated to this skill.** setup-manifold wrote
 `CONTEXT.md` and nothing else. Once you've read it, do these before
@@ -639,6 +661,14 @@ Phase 1 checkpoint. Do not guess it.
 The two checks only test the pipeline. Your driver code doesn't run until a
 benchmark connects. That's the last thing to prove.
 
+This step is mandatory on any machine that can run the model. Skip it
+only when the machine cannot (`local_test_run_possible = no` in
+`CONTEXT.md`, or `can_run_model_locally = no`). When you skip it, say
+three things in the handoff: the wrap passed both checks, the driver
+has not run yet, and the first full test happens when the user
+submits a run after `/containerize-wrap`. Do not describe the wrap as
+verified.
+
 Use `evaluate` to run the wrap in a single Python process with no server. Any
 exception comes back as a traceback:
 
@@ -698,7 +728,7 @@ edit the wrap to make the episodes match.
 > Live run:
 >   episodes                     = ?
 >   forward_count                = ? (expected: ceil(steps / exec_steps) * episodes)
->   ran without raising          = yes|no
+>   ran without raising          = yes | no | skipped (machine cannot run the model)
 > ```
 
 ---
@@ -723,7 +753,9 @@ edit the wrap to make the episodes match.
 - [ ] Checks pass; `verify` zero failed (or documented exception);
       `not_checked` quoted in handoff
 - [ ] **`evaluate` ran** at least 2 episodes without raising; forward
-      cadence counted
+      cadence counted. Or, on a machine that cannot run the model:
+      skipped, `local_test_run_possible = no` recorded, and the
+      handoff says the driver has not run
 - [ ] Handoff states what was and was not proven
 
 ---
