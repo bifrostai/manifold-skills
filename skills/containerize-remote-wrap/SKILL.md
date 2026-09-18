@@ -558,17 +558,29 @@ score it. Only a scored run does that.
 **Ask the user whether to submit one.** Something like: "The image
 is registered as version `X` and points at your endpoint at `URL`.
 Do you want to submit a scored test run? If so, which registered
-benchmark should I pair it against? A run costs cloud time."
+benchmark should I pair it against? A run costs cloud time. If
+the benchmark has a debug variant, I will run that first."
 
 Do not pick a benchmark. Do not submit on your own. If the user
 says no, stop here; the skill is done.
 
-If the user says yes and names a benchmark, run:
+**Check for a debug variant before submitting.** When the user
+names a benchmark, run `manifold benchmark list` and look for a
+debug variant of the same family: an entry named `debug-` plus
+the family name. A debug run costs much less and still makes the
+platform pull the image, start it, pair it, drive episodes, and
+reach the endpoint. Submit the first run against the debug
+variant if one is listed, otherwise against the named benchmark.
 
 ```sh
-manifold run submit <policy-slug> <benchmark-slug>
+manifold run submit <policy-slug> <debug-or-benchmark-slug>
 manifold run watch <run-id>
 ```
+
+If the pairing is rejected on the debug variant, submit against
+the named benchmark and report the mismatch to the Bifrost team.
+After a clean debug run, ask the user whether to submit the full
+benchmark.
 
 Before submitting:
 
@@ -588,6 +600,11 @@ Before submitting:
 
 A completed run does not mean the wrap is correct. Check the
 actual output.
+
+**If the run used a debug variant, skip the score comparison.**
+A debug suite is too small for a meaningful score. Check episode
+completion, first frames, and action magnitudes below. Compare
+scores only on the full run.
 
 **Episode completion.** All episodes should reach `completed`:
 
@@ -681,6 +698,9 @@ own response time; the wrap does not gate throughput here.
 >
 > (fill in below only if the user asked for a test run)
 > benchmark_slug                = ? (chosen by user)
+> debug_variant                 = <name> | none  (from `manifold benchmark list`)
+> debug_run_id                  = ?  (first run, when a debug variant exists)
+> debug_episodes_completed      = ? / ?
 > submit_confirmed_by_user      = yes | no
 > run_id                        = ?
 > episodes_completed            = ? / ?
@@ -756,6 +776,11 @@ Push and register
 If the user asked for a test run:
 
 - [ ] Benchmark chosen by the user; submit confirmed before running
+- [ ] `manifold benchmark list` checked for a debug variant of the
+      named benchmark's family; when one exists, the first run
+      used it
+- [ ] Debug run judged on episode completion, first frames, and
+      action ranges, with no score comparison
 - [ ] Test run completed; score compared to reference
 - [ ] If the benchmark is composite: score broken down by task
       group; run logs checked for lookup warnings
