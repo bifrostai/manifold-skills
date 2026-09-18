@@ -408,10 +408,24 @@ CMD ["python", "serve.py", "--pairing", "my_wrap.mypolicy_mybench", \
 
 ### Build
 
+Manifold's runners are x86_64 Linux machines, so the image has to be
+built for `linux/amd64`. On an Apple Silicon Mac, or any other arm64
+machine, `docker build` produces an arm64 image by default. The push
+to the registry succeeds. Registration succeeds too. The failure
+comes later, when the runner tries to start the container. Name the
+platform explicitly:
+
 ```sh
-docker build -f <path-to-Dockerfile> \
+docker buildx build --platform linux/amd64 \
+    -f <path-to-Dockerfile> \
     -t <registry>/<namespace>/policy-<slug>:<tag> .
 ```
+
+On an x86_64 Linux machine, plain `docker build` with the same
+`-f` and `-t` arguments does the same thing.
+
+This image contains no torch, no jax, and no CUDA libraries, so
+building it for amd64 on an arm64 machine is quick and reliable.
 
 A clean `docker build` means the image assembled without errors,
 nothing more. The driver has not run yet.
@@ -737,6 +751,8 @@ Image contents
 
 - [ ] Slim Python base image, pinned by digest, not by a floating
       tag like `latest`
+- [ ] Built for `linux/amd64` (`docker buildx build --platform
+      linux/amd64` on any arm64 machine, including Apple Silicon)
 - [ ] No CUDA base, no torch/jax, no model stack in the image
 - [ ] manifold-sdk installed at the wrap's pinned version
 - [ ] `httpx` installed at a pinned version

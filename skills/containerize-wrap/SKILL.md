@@ -396,10 +396,26 @@ CMD ["python", "serve.py", "--pairing", "my_wrap.mypolicy_mybench", \
 
 ### Build
 
+Manifold's runners are x86_64 Linux machines, so the image has to be
+built for `linux/amd64`. On an Apple Silicon Mac, or any other arm64
+machine, `docker build` produces an arm64 image by default. The push
+to the registry succeeds. Registration succeeds too. The failure
+comes later, when the runner tries to start the container. Name the
+platform explicitly:
+
 ```sh
-docker build -f <path-to-Dockerfile> \
+docker buildx build --platform linux/amd64 \
+    -f <path-to-Dockerfile> \
     -t <registry>/<namespace>/policy-<slug>:<tag> .
 ```
+
+On an x86_64 Linux machine, plain `docker build` with the same
+`-f` and `-t` arguments does the same thing.
+
+Building a CUDA image for amd64 on an arm64 machine runs the build
+steps under emulation. That is slow, and some GPU wheels fail to
+install under it. Build this image on a Linux x86_64 machine when the
+user has one.
 
 A clean `docker build` means the image assembled without errors, nothing
 more. The server has not run yet.
@@ -475,6 +491,11 @@ image, the run just looks broken.
 
 Register the image. Then ask the user whether to submit a scored test run.
 Do not submit one on your own.
+
+If `CONTEXT.md` records `local_test_run_possible = no`, add this when
+offering the run: there was no test run on the user's machine, so
+this run executes the wrap code for the first time. If the run
+crashes, check the wrap code before the image.
 
 ### Register
 
@@ -683,6 +704,8 @@ Image contents
 Dockerfile rules
 
 - [ ] Dockerfile builds without errors
+- [ ] Image built for `linux/amd64` (`docker buildx build --platform
+      linux/amd64` on any arm64 machine)
 - [ ] On a GPU box, container starts and prints its listening line;
       on a CPU-only box, skipped (rely on Phase 4)
 - [ ] Port 8000, bound on `0.0.0.0`
