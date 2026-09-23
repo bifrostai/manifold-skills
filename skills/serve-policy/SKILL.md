@@ -1,17 +1,17 @@
 ---
 name: serve-policy
 description: >
-  Start here to put a researcher's policy on Manifold. Read the policy
-  codebase, ask the user which benchmark to prepare for, write one serving
+  Start here to serve a researcher's policy on Manifold. Read the policy
+  codebase, ask the user which benchmark to prepare for, write a serving
   script, serve it from this machine with `manifold policy serve`, and run
   it against the debug variant of that benchmark. Use when the user asks to
-  "get my policy on Manifold", "evaluate my policy on Manifold", or "serve
-  my policy".
+  "setup", "connect to manifold", "run evals", "serve my policy", or
+  equivalent.
 compatibility: >
   Run from the user's policy project directory. Needs the manifold CLI,
   logged in, with `manifold policy serve NAME --version VERSION -- COMMAND`.
   Needs a manifold-sdk revision that exports `manifold.serve`. This machine
-  must be able to run the model, which usually means Linux and an NVIDIA GPU.
+  must be able to run the model, so it needs a GPU.
 ---
 
 ## Summary
@@ -19,71 +19,111 @@ compatibility: >
 The policy runs on the user's machine. Manifold runs the benchmark on its
 own machines, and sends each observation to the policy.
 
-The skill writes one Python file. That file holds three things:
+The objective is to write one Python file with three critical components:
 
-- A `PolicySignature`. It describes the images, the robot state and the
-  instruction that the model takes, and the action that it returns.
-- A `predict(obs: Observation) -> Action` function. It calls the user's
-  model.
+- A `PolicySignature` which faithfully describes the **native** inputs and
+  outputs of the policy (observations, proprioception, actions,
+  instructions, etc.).
+- A `predict(obs: Observation) -> Action` function that passes data to the
+  policy or model.
 - A call to `manifold.serve(predict, SIGNATURE)`, inside
   `if __name__ == "__main__":`.
 
-`manifold.serve` searches for adapters when a run connects. The adapters
-convert the benchmark's observations into the form that the signature
-declares. They flip or rotate images, resize them, and convert rotation
-formats. The signature must therefore describe what the model expects,
-not what the benchmark sends.
+The policy signature **MUST** represent the raw inputs and outputs of the
+policy. This is because `manifold.serve` searches for adapters when a run
+connects. The adapters convert the benchmark's observations into the form
+that the signature declares. They flip or rotate images, resize them, and
+convert rotation formats. The signature must therefore describe what the
+raw model expects, instead of what the benchmark sends.
 
 `manifold policy serve` registers the policy and this machine, then waits.
 When a run arrives, it starts the script as a child process in the same
 directory and with the same environment.
 
-The skill writes nothing else. It writes no context file, no check
-script, and no copy of the model code. It changes one project file, the
-dependency file, to add `manifold-sdk`.
+When complete, the user should have `manifold-sdk` installed in the
+project, alongside a new serving script for their policy-benchmark pair.
 
-## Rules
+## Rules before starting
 
-**Speak to the user in their language.** The user has not read the SDK
-docs. Say "which cameras your model uses", and do not say "the
-`PolicySignature` cameras". Follow the user's lead if they use a term.
+1. **Speak to the user in their language, not the SDK's.**
 
-**Ask with the structured question tool.** In Claude Code that is
-`AskUserQuestion`. Ask all questions of Phase 2 in one round.
+The user has not read the SDK docs. They will not recognize class names,
+method names, config fields, or enum values. The skill below names those
+identifiers freely because you need them to write correct code. When
+narrating progress to the user, translate.
 
-**Ask, do not invent.** Each value in the signature comes from the
-project's code, with a file and line, or from the user. A wrong value
-passes every check and then scores near zero.
+Say things like:
+- "I'll write a script that lets the benchmark run your policy."
+- "The script loaded your model and is waiting for the test run."
+- "The test run finished, and your policy scored 40%."
+- "Your policy scored zero. I'll check the image orientation first."
 
-**Keep a to-do list.** Use the planning tool of the harness, and update
-it as each step starts and ends.
+2. **Ask with the structured question tool.**
+
+In Claude Code that is `AskUserQuestion`. Ask all questions of Phase 2 in one round.
+
+3. **All decisions on data shape and semantics must be backed.**
+
+Each value in the signature must come from the project's code, with a file
+and line, or from the user. A run with a wrong value can complete and
+still score near zero.
+
+4. **Plan the entire task in a to-do list before you start, and update it as
+you go.**
+
+Use whichever planning tool your harness provides:
+
+- **Claude Code:** `TaskCreate` to seed the plan, `TaskUpdate` to move items
+  between `pending` / `in_progress` / `completed`, `TaskList` / `TaskGet` to
+  read state.
+- **Codex:** use `update_plan` to create and maintain an ordered plan, with
+  exactly one item `in_progress` at a time. Keep validation as an explicit item
+  until it passes.
+- **Other harnesses:** check the harness for a to-do list or planning tool
+  before using the fallback below.
+- **No planning tool available:** keep the plan as a plain-text checklist in
+  your responses and re-post it (with statuses updated) each time you advance.
 
 ---
 
 ## Phase 1: Understand
 
-Do this before asking the user anything.
+**Check whether this machine can run the model, now.**
+
+Run `uname -s && uname -m && nvidia-smi`.
+
+Do this before asking the user anything. The last step loads the user's
+model weights on this machine, and runs a debug benchmark that must score
+above zero.
+
+An error from `nvidia-smi` does not prove that the machine has no GPU.
+Agent harnesses often run commands in a sandbox, and the sandbox can
+block the GPU device files. When `nvidia-smi` fails, run it again outside the sandbox, and if that fails, request escalated permissions for the command, and the user approves it. If the harness has no such option, ask the user to run `nvidia-smi` in their own terminal and paste the output.
+
+Tell the user to move to another machine only after the user or an
+escalated command confirms that this machine has no GPU. If the sandbox
+blocks the GPU, run each later command that loads the model with
+escalated permissions too. This applies to `manifold policy serve`.
 
 **Tools.** Run `manifold policy serve --help`. The help must show a
 `--version` option. If it does not, stop and tell the user to upgrade the
 CLI with `uv tool upgrade manifold-cli`. Run `manifold auth status`. If
-the user is not logged in, ask them to run `manifold auth login`. Run
-`nvidia-smi`. If this machine has no NVIDIA GPU, tell the user that it
-probably cannot run the model, and ask whether to continue.
+the user is not logged in, ask them to run `manifold auth login`.
 
 **The codebase.** Find the package manager from the lockfile or the
 dependency file. Find the code that loads the model and runs inference,
 usually in files named like `eval*`, `infer*`, `serve*` or `rollout*`.
-Find the checkpoint that it loads.
+Find the checkpoint that it loads. If there are multiple checkpoints,
+ask the user which one they want to start with.
 
 **The inputs and outputs.** Record each fact below with its file and
 line:
 
 - **Images.** The name of each camera, its shape, and its orientation.
-  Declare orientation relative to the real scene: `UPRIGHT` means that
-  the image looks correct to a person standing in the scene. Code
-  comments about orientation are often wrong. Trust the training data or
-  the user.
+  Images can come in any modality, such as EO/RGB, or depth maps.
+  Declare orientation relative to the true scene: `UPRIGHT` means that
+  the image matches the 3D scene exactly. Code comments about
+  orientation can be wrong. Trust the training data or the user.
 - **Robot state.** End effector pose or joint positions, the rotation
   format, and the gripper width.
 - **Instruction.** Whether the model takes a text instruction.
@@ -96,7 +136,9 @@ line:
   script must return actions in physical units.
 
 **The benchmarks.** Run `manifold benchmark list`. Note which benchmarks
-have a debug variant, named `debug-` plus the family name.
+have a debug variant, named `debug-` plus the family name. These debug
+variants output data in the same format as their full counterparts, but
+with a low task and/or episode count for quick debugging.
 
 ---
 
@@ -110,14 +152,12 @@ Ask these questions in one round:
 - **The inputs and outputs that Phase 1 could not settle.** Ask one
   question for each fact that has no clear source in the code. Image
   orientation, the gripper sign and the rotation format matter most.
-  Explain in one sentence that a wrong answer makes the policy score near
+  Explain in one sentence that a wrong answer can make the policy score
   zero.
 - **What to call the policy on Manifold.** Offer the project folder name
   as the first option.
 - **May the skill add `manifold-sdk` to the project?** Say that this
-  changes the dependency file and installs one package.
-
-If the user says no to the install, stop.
+  installs one package.
 
 ---
 
@@ -131,23 +171,52 @@ project's package manager. With uv:
 uv add "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git@<commit>"
 ```
 
-Then run `python -c "import manifold; manifold.serve"` in the project's
-environment. An `AttributeError` means that this SDK revision is too old.
-Stop and tell the user.
-
 **Read the benchmark.** Find the chosen benchmark in `manifold.benchmarks`.
 Read its `sensors`, `embodiment.proprioception`, `embodiment.action` and
 `instruction`. Compare them with the Phase 1 facts. If the model needs a
 camera or a robot state that the benchmark does not publish, stop and
-tell the user.
+tell the user. The adapters convert differences in format when a run
+connects.
 
-**Write the script.** Write one file at the project root, named
-`serve_<benchmark>.py`. Follow these rules:
+**Write the script.**
+
+First, create a `.manifold/` directory in the project root if it doesn't
+exist.
+
+Write one file in `.manifold/`, named `serve_<policy>_<benchmark>.py`.
+Follow these rules:
 
 - Build the `PolicySignature` from the Phase 1 and Phase 2 facts. Spell
   out every convention field (`rotation=`, `gripper=`, `delta=`). Do not
   copy the benchmark's values. Check that
   `SIGNATURE.action_space.expected_length()` equals the action width.
+  Below is an example:
+  ```
+  POLICY_SIGNATURE = PolicySignature(
+      cameras=(
+          agentview(
+              shape=(224, 224, 3),
+              orientation=CameraOrientation.FLIPPED_HORIZONTAL,
+          ),
+          wrist(
+              shape=(224, 224, 3),
+              orientation=CameraOrientation.FLIPPED_HORIZONTAL,
+          ),
+      ),
+      proprioception=Proprioception(
+          ee_pose=EEObservationSpec(
+              rotation=RotationFormat.AXIS_ANGLE,
+              gripper=GripperObservationSpec(dim=2),
+          ),
+      ),
+      action_space=EEActionSpace(
+          rotation=RotationFormat.AXIS_ANGLE,
+          gripper=GripperFormat.SIGNED_OPEN_LOW,
+          delta=True,
+      ),
+      instruction=True,
+  )
+  ```
 - Load the model at the top of the module, with the project's own
   loading code. The runner waits up to 15 minutes for the script to open
   its port.
@@ -155,20 +224,39 @@ tell the user.
   the signature, the robot state from `obs.state`, and the instruction
   from `obs.instruction`. The adapters have converted them to the
   signature's form. Build the model's input as the project's inference
-  code builds it.
+  code builds it. Example:
+  ```
+  def predict(obs: Observation) -> Action:
+      out = POLICY.infer({
+          "observation/image":       obs.sensors["agentview"],
+          "observation/wrist_image": obs.sensors["wrist"],
+          "observation/state":       obs.state["ee_pose"].astype(np.float32),
+          "prompt":                  obs.instruction or "",
+      })
+      chunk = np.asarray(out["actions"])[:EXECUTION_STEPS]
+      return Action.from_array(chunk)
+  ```
 - Return the executed steps of the chunk as one `Action`, in physical
   units. Pass `Action.from_array` an array with one row for each
   executed step.
-- Call `manifold.serve(predict, SIGNATURE)` with no other arguments. The
-  runner sets `MANIFOLD_SERVER_URL`, and `manifold.serve` reads it.
+- Inside `if __name__ == "__main__":`, call
+  `manifold.serve(predict, SIGNATURE)` with no other arguments. The runner sets `MANIFOLD_SERVER_URL`, and
+  `manifold.serve` reads it.
+  ```
+  if __name__ == "__main__":
+      manifold.serve(predict, POLICY_SIGNATURE)
+  ```
 - Import the model from the project. Do not copy model code, and do not
   change other project files.
 
 **Serve.** Run this from the project root, in the background, with the
-project's run command in place of `uv run`:
+project's run command in place of `uv run`. Run it outside the sandbox,
+with escalated permissions, because the script needs the GPU and the
+network. If the harness cannot run a background process outside the
+sandbox, ask the user to run the command in their own terminal:
 
 ```
-manifold policy serve <policy> --version v1 -- uv run serve_<benchmark>.py
+manifold policy serve <policy> --version v1 -- uv run .manifold/serve_<policy>_<benchmark>.py
 ```
 
 Use `v1` unless the user named a version. Wait for the line
@@ -185,31 +273,96 @@ manifold run watch <run-id>
 Read the output of `manifold policy serve` while the run is in progress.
 It shows the script's start and any traceback.
 
-- **The run stays queued.** Check that the serve process is still
-  running, with the same policy name and version.
+The run must get a non-zero score. If the run fails, or if the debug run
+completes with all tasks and episodes scoring zero, go to
+Troubleshooting.
+
+**Stop serving.** Once the debug run scores above zero, stop the serve
+process. Send it SIGINT, which Ctrl-C also sends, with
+`kill -INT <pid>`. SIGINT lets the command remove this machine's
+registration before it exits. SIGKILL skips that step, and the machine
+stays registered. Wait for the process to exit, then read its last
+lines. If they say `This machine is still registered with Manifold`,
+find the runner with `manifold runner list` and remove it with
+`manifold runner revoke`.
+
+---
+
+## Troubleshooting
+
+After each fix, stop the serve process with Ctrl-C, and serve again
+under a new version, such as `v2`. Manifold lists runs under their
+version string. With a new string, the runs of the fixed script appear
+apart from the failed runs.
+Then submit the debug run again.
+
+### The run does not start or finish
+
+- **The run stays queued.** The serve process has stopped, or it serves
+  a different policy name or version. Check that it is still running,
+  and that its name and version match the run.
+- **The script fails before the run starts.** The serve output shows the
+  traceback. An import error usually means that the serve command used a
+  different environment. Start the serve command from the project root,
+  with the project's own run command.
+- **The runner gives up while the model loads.** The runner waits 15
+  minutes for the script to open its port. If the weights take longer to
+  download, download them once before you serve.
 - **The run fails as it connects, with a `ValueError`.** The adapters
-  cannot convert the benchmark into the signature. Check the camera
-  names, the gripper width and the action type against the benchmark.
-- **The script fails.** Fix the script, stop the serve process with
-  Ctrl-C, and serve again under a new version, such as `v2`.
+  cannot convert the benchmark's data into the signature. Compare the
+  camera names, the robot state and the action type in the signature
+  against the benchmark. If the signature is wrong, fix it to match the
+  model. Do not change it to match the benchmark.
+- **The script fails inside `predict`.** The traceback usually names a
+  shape or a key. Print the shape of each value in `obs.sensors` and
+  `obs.state` once, and compare it with the model's input.
+
+### The run completes, but every episode scores zero
+
+A zero score means that the script runs, but one of its values is
+wrong. Check the causes below in order. The list starts with the most
+common cause.
+
+1. **Image orientation.** Temporarily save an image for each camera that
+   `predict` receives, then compare it with a frame from the training
+   data or show it to the user. The two must match. A mirrored or
+   upside-down image means that the signature declares the wrong
+   orientation. Remove the saving code after the check.
+2. **Gripper sign.** Watch an episode from the run link. If the gripper
+   opens when it should close, the signature declares the wrong gripper
+   convention.
+3. **Normalization.** Print the actions that `predict` returns for a few
+   steps. Values that sit near -1 and 1 for every dimension suggest that
+   the model returns normalized actions. Convert them to physical units
+   with the project's own statistics.
+4. **Rotation format and deltas.** If the arm spins or drifts away from
+   the objects, compare the rotation format and the `delta` setting in
+   the signature with the project's evaluation code.
+5. **Robot state.** Compare the order and the width of `obs.state` with
+   the state that the project's evaluation code (if any) passes to the model.
+6. **Chunk length.** Return the number of steps that the policy
+   executes, not the full chunk that the model predicts.
+7. **Instruction.** Print `obs.instruction` once. A model that needs a
+   text instruction fails when it receives an empty string.
+8. **Checkpoint.** Confirm with the user that the checkpoint was trained
+   for this benchmark.
+
+If the score is still zero after all eight checks, stop. Show the user
+what you checked and what you found.
 
 ---
 
 ## Hand back to the user
 
-Tell the user these facts:
+Once the debug run scores above zero and the serve process has exited,
+tell the user three things:
 
-- The path of the script, and the serve command.
-- The result of the debug run, with the link that `manifold run submit`
-  printed, and `manifold run get <run-id> --episodes` for the episodes.
-- A debug run proves that the policy runs. It does not prove a good
-  score. A score near zero on the full benchmark usually means a wrong
-  image orientation, gripper sign or rotation format.
-- The serve process must keep running for any run to use the policy.
-  Ctrl-C stops serving, and Manifold then stops sending runs to this
-  machine.
-- Manifold groups runs by the version string, and nothing checks the
-  code or weights behind it. After any change to the script or the
-  weights, serve under a new version.
+- The path of the serving script, `.manifold/serve_<policy>_<benchmark>.py`.
+- The debug score, and the link that `manifold run submit` printed, so
+  that they can inspect the run.
+- The serve command, so that they can serve the policy again. A run
+  starts only while the serve command is running.
 
-Then ask whether to submit a run against the full benchmark.
+Then ask whether to submit a run against the full benchmark. If the user
+says yes, start the serve command again with the same version, submit
+the run, and stop serving after the run completes.
