@@ -102,10 +102,16 @@ An error from `nvidia-smi` does not prove that the machine has no GPU.
 Agent harnesses often run commands in a sandbox, and the sandbox can
 block the GPU device files. When `nvidia-smi` fails, run it again outside the sandbox, and if that fails, request escalated permissions for the command, and the user approves it. If the harness has no such option, ask the user to run `nvidia-smi` in their own terminal and paste the output.
 
-Tell the user to move to another machine only after the user or an
-escalated command confirms that this machine has no GPU. If the sandbox
-blocks the GPU, run each later command that loads the model with
-escalated permissions too. This applies to `manifold policy serve`.
+If the sandbox blocks the GPU, run each later command that loads the
+model with escalated permissions too. This applies to
+`manifold policy serve`.
+
+The user or an escalated command may confirm that this machine has no
+GPU. Then offer the user two options. The user can move this session to
+a machine with a GPU. The user can also serve the policy from a GPU
+container on a cloud platform, as the "Serve from a cloud container"
+section describes. If the project deploys to a cloud platform, offer
+that platform first.
 
 **Tools.** Run `manifold policy serve --help`. The help must show
 `<identifier>:<version>`. If it does not, stop and tell the user to upgrade the
@@ -160,6 +166,10 @@ Ask these questions in one round:
   as the first option.
 - **May the skill add `manifold-sdk` to the project?** Say that this
   installs one package.
+- **Only when serving from a cloud container: which platform and which
+  GPU?** Offer the platform and the GPU from the project's own
+  deployment first, if the project has one. The GPU needs enough memory
+  for the model.
 
 ---
 
@@ -251,6 +261,9 @@ Follow these rules:
 - Import the model from the project. Do not copy model code, and do not
   change other project files.
 
+If the user serves from a cloud container, follow the "Serve from a
+cloud container" section from here.
+
 **Serve.** Start the serve command so that it keeps running after your
 shell exits. Run it from the project root, with the project's run
 command in place of `uv run`. Run it outside the sandbox, with escalated
@@ -321,6 +334,80 @@ registered with Manifold`, remove the registration by hand:
    taken.
 2. Run `manifold runner show <name>` to get the runner ID.
 3. Run `manifold runner revoke <runner-id>`.
+
+---
+
+## Serve from a cloud container
+
+Use this section in place of the "Serve" and "Stop serving" steps when
+the user serves the policy from a GPU container on a cloud platform.
+Write the serving script as Phase 3 describes. The serving script does
+not change.
+
+**Check the platform's CLI.** Check that the platform's CLI is installed
+and logged in. If it is not, ask the user to set it up.
+
+**Write the container definition.** Write it in `.manifold/`, in the
+format that the platform uses. Read the platform's docs for the format
+of the installed version. If the project deploys to this platform, copy
+its image definition. The container needs these parts:
+
+- An image that holds the project, its dependencies and `manifold-sdk`.
+  The image also needs the manifold CLI. Install the CLI with
+  `uv tool install manifold-cli --index https://bifrost-manifold-releases.s3.us-west-2.amazonaws.com/simple/`.
+  The CLI needs Python 3.13, and `uv` downloads it when the image lacks
+  it.
+- The GPU from Phase 2.
+- A time limit long enough for a full benchmark run. Many platforms stop
+  a container after a short default time limit.
+- Storage that keeps the model weights between starts. Point the
+  project's weight cache at it. Without this storage, the container
+  downloads the weights at each start. The runner waits 15 minutes for
+  the script to open its port, and a download can take longer.
+- Storage that keeps the manifold login between starts. Set the
+  environment variable `MANIFOLD_CONFIG_DIR` to its path. The CLI stores
+  its login in that directory. The user then logs in at the first start
+  only. Run a single container at a time with this storage, because the
+  CLI rewrites the login when it refreshes.
+- A start command that prints the container's hostname with `hostname`,
+  then runs `manifold auth status`. That command exits with code 0 even
+  when the user is logged out. So the start command reads its output. If
+  the output does not start with `Logged in as`, the start command runs
+  `manifold auth login`. Then it runs the serve command from the "Serve"
+  step in the foreground, from the project root in the image.
+
+Pass `MANIFOLD_API_URL` and `MANIFOLD_WEBAPP_URL` into the container if
+they are set on this machine. The CLI in the container then uses the
+same Manifold deployment.
+
+**Start the container.** Start the platform's command that runs the
+container and streams its output. Start it in the same way as the
+"Serve" step starts the serve command. Use the tmux session name
+`cloud-<policy>`. Write the output to `.manifold/cloud.log`, and write
+the PID to `.manifold/cloud.pid`.
+
+At the first start, `manifold auth login` prints a link after `Visit`,
+and a code after `confirm code`. Show both to the user, and ask the user
+to open the link. Then wait for a line that starts with `Ready` in
+`.manifold/cloud.log`.
+
+The platform bills the GPU while the container waits for work. Start
+the container right before you submit a run.
+
+**Run the debug benchmark.** Submit the debug run as Phase 3 describes.
+Read `.manifold/cloud.log` for the script's output and any traceback.
+
+**Stop the container.** Stop it with the platform's own command, or
+send SIGINT to the local command, as the "Stop serving" step describes.
+The platform may stop the serve command before the command removes its
+registration. So run `manifold runner list` after the container stops.
+The container printed its hostname at the start of
+`.manifold/cloud.log`. If a runner with that name is listed, remove it
+as the "Stop serving" step describes.
+
+Tell the user that the two storage locations keep the weights and the
+login for the next start. Deleting the login storage makes the next
+container log in again.
 
 ---
 
