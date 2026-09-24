@@ -344,6 +344,11 @@ the user serves the policy from a GPU container on a cloud platform.
 Write the serving script as Phase 3 describes. The serving script does
 not change.
 
+**Read the platform's reference.** Look for a reference file for the
+platform in `references/`, next to this skill. For example, read
+[references/modal.md](references/modal.md) for Modal. The reference file
+maps the steps below to the platform's own commands and settings.
+
 **Check the platform's CLI.** Check that the platform's CLI is installed
 and logged in. If it is not, ask the user to set it up.
 
