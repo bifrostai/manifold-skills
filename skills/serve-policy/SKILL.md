@@ -251,18 +251,42 @@ Follow these rules:
 - Import the model from the project. Do not copy model code, and do not
   change other project files.
 
-**Serve.** Run this from the project root, in the background, with the
-project's run command in place of `uv run`. Run it outside the sandbox,
-with escalated permissions, because the script needs the GPU and the
-network. If the harness cannot run a background process outside the
-sandbox, ask the user to run the command in their own terminal:
+**Serve.** Start the serve command so that it keeps running after your
+shell exits. Run it from the project root, with the project's run
+command in place of `uv run`. Run it outside the sandbox, with escalated
+permissions, because the script needs the GPU and the network. If the
+harness cannot start a process outside the sandbox, ask the user to run
+the commands below in their own terminal.
 
-```
-manifold policy serve <policy>:0.0.1 -- uv run .manifold/serve_<policy>_<benchmark>.py
-```
+Do not start the serve command with a plain `&`. A process that the
+agent's shell starts with `&` ends when that shell exits, or when the
+user's SSH session closes.
+
+Use tmux if `which tmux` finds it. Otherwise use `setsid nohup`.
+
+1. With tmux. If `tmux has-session -t manifold-<policy>` succeeds, a
+   serve process for this policy is running. Stop it as the "Stop
+   serving" step describes before you start it again.
+
+   ```
+   tmux new -d -s manifold-<policy> 'manifold policy serve <policy>:0.0.1 -- uv run .manifold/serve_<policy>_<benchmark>.py > .manifold/serve.log 2>&1'
+   ```
+
+2. Without tmux:
+
+   ```
+   setsid nohup manifold policy serve <policy>:0.0.1 -- uv run .manifold/serve_<policy>_<benchmark>.py > .manifold/serve.log 2>&1 &
+   echo $! > .manifold/serve.pid
+   ```
+
+   `setsid` moves the command out of the shell's session. `nohup` makes
+   the command ignore SIGHUP. With both, the command keeps running when
+   the agent's shell or the user's SSH session closes.
 
 Use `0.0.1` unless the user named a version. The script loads the model
-first, which can take minutes. Wait for the line that starts with `Ready`.
+first, which can take minutes. Read the output with
+`tail -n 50 .manifold/serve.log`, and wait for the line that starts with
+`Ready`.
 
 **Run the debug benchmark.** Submit a run against the debug variant of
 the chosen benchmark, then follow it:
@@ -272,32 +296,36 @@ manifold run submit <policy>:0.0.1 debug-<family> --name <policy>-debug
 manifold run watch <run-id>
 ```
 
-Read the output of `manifold policy serve` while the run is in progress.
-It shows the output of the script and any traceback. The run's log in the
-app shows the same lines.
+Read `.manifold/serve.log` while the run is in progress. The log shows
+the output of the script and any traceback. The run's log in the app
+shows the same lines.
 
 The run must get a non-zero score. If the run fails, or if the debug run
 completes with all tasks and episodes scoring zero, go to
 Troubleshooting.
 
-**Stop serving.** Once the debug run scores above zero, stop the serve
-process. Send it SIGINT, which Ctrl-C also sends, with
-`kill -INT <pid>`. SIGINT lets the command remove this machine's
-registration before it exits. SIGKILL skips that step, and the machine
-stays registered. Wait for the process to exit, then read its last
-lines. If they say `This machine is still registered with Manifold`,
-find the runner with `manifold runner list` and remove it with
-`manifold runner revoke`.
+**Stop serving.** Once the debug run scores above zero, send SIGINT to
+the serve process. SIGINT lets the command remove this machine's
+registration before it exits.
+
+- If you started it with tmux, run `tmux send-keys -t manifold-<policy> C-c`.
+- Otherwise, run `kill -INT $(cat .manifold/serve.pid)`.
+
+Do not send SIGKILL with `kill -9`. SIGKILL stops the command before it
+removes the registration. Wait for the process to exit, then read the
+last lines of `.manifold/serve.log`. If they say `This machine is still
+registered with Manifold`, find the runner with `manifold runner list`
+and remove it with `manifold runner revoke`.
 
 ---
 
 ## Troubleshooting
 
-After each fix, stop the serve process with Ctrl-C, and serve again
-under a new version, such as `0.0.2`. Manifold lists runs under their
-version string. With a new string, the runs of the fixed script appear
-apart from the failed runs.
-Then submit the debug run again.
+After each fix, stop serving as the "Stop serving" step describes, and
+serve again under a new version, such as `0.0.2`. Manifold lists runs
+under their version string. With a new string, the runs of the fixed
+script appear apart from the failed runs. Then submit the debug run
+again.
 
 ### The run does not start or finish
 
@@ -361,13 +389,15 @@ what you checked and what you found.
 ## Hand back to the user
 
 Once the debug run scores above zero and the serve process has exited,
-tell the user three things:
+tell the user four things:
 
 - The path of the serving script, `.manifold/serve_<policy>_<benchmark>.py`.
 - The debug score, and the link that `manifold run submit` printed, so
   that they can inspect the run.
 - The serve command, so that they can serve the policy again. A run
   starts only while the serve command is running.
+- How to stop serving. Give them the tmux command or the `kill -INT`
+  command from the "Stop serving" step.
 
 Then ask whether to submit a run against the full benchmark. If the user
 says yes, start the serve command again with the same version, submit
