@@ -188,9 +188,9 @@ Consequences for the remote case:
    wrap the container serves. Registration cannot override it.
 2. **Tags become versions.** Registration reads the image tag and
    uses it as the version string. Re-running `manifold policy init`
-   on an existing tag overwrites that version's config in place.
-   Bump the tag anyway for every rebuild, so each run on the
-   platform maps to exactly one image build.
+   on an existing tag with new settings fails. Bump the tag for every
+   rebuild and for every change to `--env`, so each run on the
+   platform maps to one image build and one set of settings.
 3. **The runner injects `config.env` at container start.** The env
    map from the registered version becomes environment variables in
    the container. The driver reads the endpoint URL from one of
@@ -540,12 +540,15 @@ The image tag becomes the version. So `--image
 
 **`--env` replaces the whole env map.** It does not merge with an
 earlier registration. Pass every key the driver reads on every
-call: the URL, any token vars, any tunable overrides. If you re-run
-the command with only one `--env`, the others are gone.
+call: the URL, any token vars, any tunable overrides. A new tag
+registered with only one `--env` has only that key.
 
-**Re-running on the same tag overwrites the version's config in
-place.** This is how you fix a wrong URL without a rebuild. It does
-not update the image. After a source edit, rebuild (see Phase 3).
+**A tag keeps the settings that it was first registered with.**
+Re-running the command on the same tag with a different `--env`
+fails with `already registered with different settings`. To fix a
+wrong URL without a rebuild, tag the same image with a new tag, push
+that tag, and register it. After a source edit, rebuild (see
+Phase 3).
 
 **`minimum_gpu_memory_gb: 0`.** The container has no GPU work to
 do, and 0 lets placement take a GPU-less runner instead of
