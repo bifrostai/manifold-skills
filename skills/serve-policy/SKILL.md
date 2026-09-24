@@ -314,8 +314,13 @@ registration before it exits.
 Do not send SIGKILL with `kill -9`. SIGKILL stops the command before it
 removes the registration. Wait for the process to exit, then read the
 last lines of `.manifold/serve.log`. If they say `This machine is still
-registered with Manifold`, find the runner with `manifold runner list`
-and remove it with `manifold runner revoke`.
+registered with Manifold`, remove the registration by hand:
+
+1. Run `manifold runner list`. The serve command names the runner after
+   the machine's hostname. It adds a short suffix when that name is
+   taken.
+2. Run `manifold runner show <name>` to get the runner ID.
+3. Run `manifold runner revoke <runner-id>`.
 
 ---
 
