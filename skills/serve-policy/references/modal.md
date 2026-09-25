@@ -10,12 +10,15 @@ read the Modal docs for that call.
 
 ## Check the CLI
 
-Run `modal --version` and `modal profile current`. If `modal --version`
+Run `modal --version` and `modal token info`. If `modal --version`
 fails, ask the user to install the Modal CLI with `uv tool install modal`.
 uv installs it in its own environment, so the project's dependencies stay
 the same. The app file imports only `modal` and the Python standard
 library, so the CLI can run it from that environment. If
-`modal profile current` fails, ask the user to log in with `modal setup`.
+`modal token info` fails, ask the user to log in with `modal setup`.
+
+Do not check the login with `modal profile current`. That command prints
+`default` even when Modal lacks a token.
 
 ## Write the app
 
@@ -45,12 +48,13 @@ image = (
     .apt_install("git")
     .pip_install("uv")
     .run_commands(
-        "uv tool install manifold-cli --index "
+        "uv tool install --python 3.13 manifold-cli --index "
         "https://bifrost-manifold-releases.s3.us-west-2.amazonaws.com/simple/"
     )
     .env({"PATH": "/root/.local/bin:/usr/local/bin:/usr/bin:/bin"})
     .add_local_dir(
-        PROJECT, REMOTE_PROJECT, copy=True, ignore=[".venv", ".git"]
+        PROJECT, REMOTE_PROJECT, copy=True,
+        ignore=[".venv", ".git", ".manifold/*.log", ".manifold/*.pid"],
     )
     .workdir(REMOTE_PROJECT)
     .run_commands("uv sync --frozen")
@@ -90,10 +94,21 @@ def serve() -> None:
 Notes on the skeleton:
 
 - `modal run` runs `serve` because the app has a single function.
+- The container's hostname is `modal`. The first container registers
+  as the runner `modal`. A container that starts while that name is
+  registered gets a suffix.
 - `copy=True` bakes the project into the image. Modal allows build
   steps after `add_local_dir` only with `copy=True`, and `uv sync` is a
   build step. `ignore` keeps the local `.venv` and `.git` out of the
-  image.
+  image. It also leaves out the log and PID files. `modal run` writes
+  to `.manifold/cloud.log` while Modal copies the project, and Modal
+  stops the build when a file changes during the copy.
+- `--python 3.13` lets uv install the CLI on an image with an older
+  Python. Without it, `uv tool install` fails.
+- The project may install a package from a local path, such as
+  `{ path = "../manifold-sdk" }`. The image holds only the project, so
+  that path does not exist there. Install the package from its Git
+  repository, pinned to a commit, before you build the image.
 - `uv sync --frozen` installs the dependencies from `uv.lock`. If the
   project uses another package manager, replace this step and the
   `uv run` in `SERVE_COMMAND` with that manager's commands.
@@ -122,8 +137,11 @@ not pass `--detach`. With `--detach`, the app keeps running after
 `modal run` exits, and Modal keeps billing the GPU.
 
 Stop the app with SIGINT to `modal run`, which Ctrl-C also sends.
-Modal stops an app that `modal run` started when `modal run` exits. Then check `manifold runner list`
-as the "Stop serving" step in `skills/serve-policy/SKILL.md` describes.
+Modal passes the interrupt to the serve command, then ends the
+container a few seconds later. The serve command may not finish
+removing its registration in that time. Then check
+`manifold runner list` for `modal`, and revoke it as the "Stop serving"
+step in `skills/serve-policy/SKILL.md` describes.
 
 ## If the app dies during a run
 
