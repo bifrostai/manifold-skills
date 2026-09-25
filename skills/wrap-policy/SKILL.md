@@ -4,9 +4,7 @@ description: >
   Wrap a researcher's policy for the Manifold platform, then prove it with
   check_compatibility, verify, and a live run of the driver (the live run
   is skipped, with the user's consent, on a machine that cannot run the
-  model). Use when the model loads into the built container. For policies where the model
-  runs on the user's own inference server (Modal, private HTTPS box),
-  use `/wrap-remote-policy` instead.
+  model). Use when the model loads into the built container.
 compatibility: >
   Run this skill from the user's policy project directory, after
   `/setup-manifold` has written `<project>/.manifold/CONTEXT.md`. Everything this
@@ -28,10 +26,6 @@ words as labels for the files throughout:
   is one pairing file per benchmark the user wants to run against.
 
 Together these files are called the **wrap**.
-
-This skill is for the case where the model loads into the built
-container. If the model runs on the user's own inference server (Modal
-endpoint, private HTTPS box), use `/wrap-remote-policy` instead.
 
 All conversions and transformations happen in the wrap. The benchmark
 side is fixed.
@@ -85,11 +79,6 @@ benchmarks of interest. Read that file before asking the user
 anything else; ask only about details `CONTEXT.md` does not already
 cover.
 
-**Stop if this is a hosted-endpoint policy.** If `CONTEXT.md` has
-`model_runtime = hosted_endpoint`, this skill is the wrong one. Stop
-and point the user at `/wrap-remote-policy`, which handles wraps for
-policies that run on the user's own inference server.
-
 **Check whether this machine can run the model, before Phase 1.**
 Phase 3 finishes with a test run that loads the user's real
 checkpoint, and that run needs Linux and an NVIDIA GPU. No earlier
@@ -107,7 +96,7 @@ because it has no GPU, so do they want to proceed anyway? On a yes,
 record `local_test_run_possible = no` in `CONTEXT.md`, write the
 wrap, run both checks, and skip the test run as described under
 "Run the wrap". On a no, stop, and help them move to a machine with
-a GPU or switch to `/wrap-remote-policy`.
+a GPU.
 
 **Jobs setup-manifold delegated to this skill.** setup-manifold wrote
 `CONTEXT.md` and nothing else. Once you've read it, do these before

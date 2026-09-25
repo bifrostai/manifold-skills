@@ -6,8 +6,7 @@ description: >
   when asked to "containerize my policy", "build the policy image", "push my
   wrap to ghcr", "register my policy on the platform", or "get my wrap running
   on the platform". This skill is for the case where the model loads into the
-  container. For policies where the model runs on the user's own inference
-  server, use `/containerize-remote-wrap` instead.
+  container.
 compatibility: >
   Run this skill from the user's policy project directory, after
   `/wrap-policy` has written the wrap files under
@@ -39,10 +38,6 @@ The output is four things:
 
 Files 1 and 2 are new files on disk. The other two live on the registry
 and on the platform.
-
-This skill is for the case where the model loads into the built
-container. If the model runs on the user's own inference server (Modal
-endpoint, private HTTPS box), use `/containerize-remote-wrap` instead.
 
 Once all four exist, the skill's job is done. After that, ask the user
 whether to submit a scored test run against a benchmark of their choice
@@ -89,11 +84,6 @@ the package manager, registry, weights location, deployment style,
 GPU / VRAM, and benchmarks of interest; wrap-policy added anything
 else it learned. Read `CONTEXT.md` before asking the user anything;
 ask only about details it does not cover.
-
-**Stop if this is a hosted-endpoint policy.** If `CONTEXT.md` has
-`model_runtime = hosted_endpoint`, this skill is the wrong one. Stop
-and point the user at `/containerize-remote-wrap`, which packages
-wraps for policies that run on the user's own inference server.
 
 **Write into `.manifold/<slug>/`.** The `Dockerfile` and `serve.py`
 this skill produces both live under
