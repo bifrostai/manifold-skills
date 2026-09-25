@@ -102,10 +102,18 @@ An error from `nvidia-smi` does not prove that the machine has no GPU.
 Agent harnesses often run commands in a sandbox, and the sandbox can
 block the GPU device files. When `nvidia-smi` fails, run it again outside the sandbox, and if that fails, request escalated permissions for the command, and the user approves it. If the harness has no such option, ask the user to run `nvidia-smi` in their own terminal and paste the output.
 
-Tell the user to move to another machine only after the user or an
-escalated command confirms that this machine has no GPU. If the sandbox
-blocks the GPU, run each later command that loads the model with
-escalated permissions too. This applies to `manifold policy serve`.
+If the sandbox blocks the GPU, run each later command that loads the
+model with escalated permissions too. This applies to
+`manifold policy serve`.
+
+The user or an escalated command may confirm that this machine has no
+GPU. Then offer the user two options. The user can move this session to
+a machine with a GPU. That machine can be a cloud VM, such as an AWS EC2
+instance or a GCP Compute Engine instance. For a cloud VM, also read
+[references/cloud-vm.md](references/cloud-vm.md). The user can also
+serve the policy from a GPU container on a cloud platform, as the "Serve
+from a cloud container" section describes. If the project deploys to a
+cloud platform, offer that platform first.
 
 **Tools.** Run `manifold policy serve --help`. The help must show
 `<identifier>:<version>`. If it does not, stop and tell the user to upgrade the
@@ -160,6 +168,10 @@ Ask these questions in one round:
   as the first option.
 - **May the skill add `manifold-sdk` to the project?** Say that this
   installs one package.
+- **Only when serving from a cloud container: which platform and which
+  GPU?** Offer the platform and the GPU from the project's own
+  deployment first, if the project has one. The GPU needs enough memory
+  for the model.
 
 ---
 
@@ -251,18 +263,45 @@ Follow these rules:
 - Import the model from the project. Do not copy model code, and do not
   change other project files.
 
-**Serve.** Run this from the project root, in the background, with the
-project's run command in place of `uv run`. Run it outside the sandbox,
-with escalated permissions, because the script needs the GPU and the
-network. If the harness cannot run a background process outside the
-sandbox, ask the user to run the command in their own terminal:
+If the user serves from a cloud container, follow the "Serve from a
+cloud container" section from here.
 
-```
-manifold policy serve <policy>:0.0.1 -- uv run .manifold/serve_<policy>_<benchmark>.py
-```
+**Serve.** Start the serve command so that it keeps running after your
+shell exits. Run it from the project root, with the project's run
+command in place of `uv run`. Run it outside the sandbox, with escalated
+permissions, because the script needs the GPU and the network. If the
+harness cannot start a process outside the sandbox, ask the user to run
+the commands below in their own terminal.
+
+Do not start the serve command with a plain `&`. A process that the
+agent's shell starts with `&` ends when that shell exits, or when the
+user's SSH session closes.
+
+Use tmux if `which tmux` finds it. Otherwise use `setsid nohup`.
+
+1. With tmux. If `tmux has-session -t manifold-<policy>` succeeds, a
+   serve process for this policy is running. Stop it as the "Stop
+   serving" step describes before you start it again.
+
+   ```
+   tmux new -d -s manifold-<policy> 'manifold policy serve <policy>:0.0.1 -- uv run .manifold/serve_<policy>_<benchmark>.py > .manifold/serve.log 2>&1'
+   ```
+
+2. Without tmux:
+
+   ```
+   setsid nohup manifold policy serve <policy>:0.0.1 -- uv run .manifold/serve_<policy>_<benchmark>.py > .manifold/serve.log 2>&1 &
+   echo $! > .manifold/serve.pid
+   ```
+
+   `setsid` moves the command out of the shell's session. `nohup` makes
+   the command ignore SIGHUP. With both, the command keeps running when
+   the agent's shell or the user's SSH session closes.
 
 Use `0.0.1` unless the user named a version. The script loads the model
-first, which can take minutes. Wait for the line that starts with `Ready`.
+first, which can take minutes. Read the output with
+`tail -n 50 .manifold/serve.log`, and wait for the line that starts with
+`Ready`.
 
 **Run the debug benchmark.** Submit a run against the debug variant of
 the chosen benchmark, then follow it:
@@ -272,32 +311,124 @@ manifold run submit <policy>:0.0.1 debug-<family> --name <policy>-debug
 manifold run watch <run-id>
 ```
 
-Read the output of `manifold policy serve` while the run is in progress.
-It shows the output of the script and any traceback. The run's log in the
-app shows the same lines.
+Read `.manifold/serve.log` while the run is in progress. The log shows
+the output of the script and any traceback. The run's log in the app
+shows the same lines.
 
 The run must get a non-zero score. If the run fails, or if the debug run
 completes with all tasks and episodes scoring zero, go to
 Troubleshooting.
 
-**Stop serving.** Once the debug run scores above zero, stop the serve
-process. Send it SIGINT, which Ctrl-C also sends, with
-`kill -INT <pid>`. SIGINT lets the command remove this machine's
-registration before it exits. SIGKILL skips that step, and the machine
-stays registered. Wait for the process to exit, then read its last
-lines. If they say `This machine is still registered with Manifold`,
-find the runner with `manifold runner list` and remove it with
-`manifold runner revoke`.
+**Stop serving.** Once the debug run scores above zero, send SIGINT to
+the serve process. SIGINT lets the command remove this machine's
+registration before it exits.
+
+- If you started it with tmux, run `tmux send-keys -t manifold-<policy> C-c`.
+- Otherwise, run `kill -INT $(cat .manifold/serve.pid)`.
+
+Do not send SIGKILL with `kill -9`. SIGKILL stops the command before it
+removes the registration. Wait for the process to exit, then read the
+last lines of `.manifold/serve.log`. If they say `This machine is still
+registered with Manifold`, remove the registration by hand:
+
+1. Run `manifold runner list`. The serve command names the runner after
+   the machine's hostname. It adds a short suffix when that name is
+   taken.
+2. Run `manifold runner show <name>` to get the runner ID.
+3. Run `manifold runner revoke <runner-id>`.
+
+---
+
+## Serve from a cloud container
+
+Use this section in place of the "Serve" and "Stop serving" steps when
+the user serves the policy from a GPU container on a cloud platform.
+Write the serving script as Phase 3 describes. The serving script does
+not change.
+
+**Read the platform's reference.** Look for a reference file for the
+platform in `references/`, next to this skill. For example, read
+[references/modal.md](references/modal.md) for Modal. The reference file
+maps the steps below to the platform's own commands and settings.
+
+**Check the platform's CLI.** Check that the platform's CLI is installed
+and logged in. If it is not, ask the user to set it up.
+
+**Write the container definition.** Write it in `.manifold/`, in the
+format that the platform uses. Read the platform's docs for the format
+of the installed version. If the project deploys to this platform, copy
+its image definition. The container needs these parts:
+
+- An image that holds the project, its dependencies and `manifold-sdk`.
+  The image also needs the manifold CLI. Install the CLI with
+  `uv tool install --python 3.13 manifold-cli --index https://bifrost-manifold-releases.s3.us-west-2.amazonaws.com/simple/`.
+  The CLI needs Python 3.13. Without `--python 3.13`, uv uses the
+  image's Python and fails when that Python is older.
+- A copy of the project that leaves out `.manifold/*.log` and
+  `.manifold/*.pid`. The local command writes to those files while the
+  platform copies the project, and a platform can stop the build when a
+  file changes during the copy.
+- The GPU from Phase 2.
+- A time limit long enough for a full benchmark run. Many platforms stop
+  a container after a short default time limit.
+- Storage that keeps the model weights between starts. Point the
+  project's weight cache at it. Without this storage, the container
+  downloads the weights at each start. The runner waits 15 minutes for
+  the script to open its port, and a download can take longer.
+- Storage that keeps the manifold login between starts. Set the
+  environment variable `MANIFOLD_CONFIG_DIR` to its path. The CLI stores
+  its login in that directory. The user then logs in at the first start
+  only. Run a single container at a time with this storage, because the
+  CLI rewrites the login when it refreshes.
+- A start command that prints the container's hostname with `hostname`,
+  then runs `manifold auth status`. That command exits with code 0 even
+  when the user is logged out. So the start command reads its output. If
+  the output does not start with `Logged in as`, the start command runs
+  `manifold auth login`. Then it runs the serve command from the "Serve"
+  step in the foreground, from the project root in the image.
+
+Pass `MANIFOLD_API_URL` and `MANIFOLD_WEBAPP_URL` into the container if
+they are set on this machine. The CLI in the container then uses the
+same Manifold deployment.
+
+**Start the container.** Start the platform's command that runs the
+container and streams its output. Start it in the same way as the
+"Serve" step starts the serve command. Use the tmux session name
+`cloud-<policy>`. Write the output to `.manifold/cloud.log`, and write
+the PID to `.manifold/cloud.pid`.
+
+At the first start, `manifold auth login` prints a link after `Visit`,
+and a code after `confirm code`. Show both to the user, and ask the user
+to open the link. Then wait for a line that starts with `Ready` in
+`.manifold/cloud.log`.
+
+The platform bills the GPU while the container waits for work. Start
+the container right before you submit a run.
+
+**Run the debug benchmark.** Submit the debug run as Phase 3 describes.
+Read `.manifold/cloud.log` for the script's output and any traceback.
+
+**Stop the container.** Stop it with the platform's own command, or
+send SIGINT to the local command, as the "Stop serving" step describes.
+The platform may stop the serve command before the command removes its
+registration. So run `manifold runner list` after the container stops.
+The container printed its hostname at the start of
+`.manifold/cloud.log`. If a runner with that name is listed, remove it
+as the "Stop serving" step describes.
+
+Tell the user that the two storage locations keep the weights and the
+login for the next start. Deleting the login storage makes the next
+container log in again.
 
 ---
 
 ## Troubleshooting
 
-After each fix, stop the serve process with Ctrl-C, and serve again
-under a new version, such as `0.0.2`. Manifold lists runs under their
-version string. With a new string, the runs of the fixed script appear
-apart from the failed runs.
-Then submit the debug run again.
+After each fix, stop serving as the "Stop serving" step describes, and
+serve again under a new version, such as `0.0.2`. Manifold lists runs
+under their version string. With a new string, the runs of the fixed
+script appear apart from the failed runs. Then submit the debug run
+again.
 
 ### The run does not start or finish
 
@@ -361,13 +492,15 @@ what you checked and what you found.
 ## Hand back to the user
 
 Once the debug run scores above zero and the serve process has exited,
-tell the user three things:
+tell the user four things:
 
 - The path of the serving script, `.manifold/serve_<policy>_<benchmark>.py`.
 - The debug score, and the link that `manifold run submit` printed, so
   that they can inspect the run.
 - The serve command, so that they can serve the policy again. A run
   starts only while the serve command is running.
+- How to stop serving. Give them the tmux command or the `kill -INT`
+  command from the "Stop serving" step.
 
 Then ask whether to submit a run against the full benchmark. If the user
 says yes, start the serve command again with the same version, submit
