@@ -34,13 +34,11 @@ flowchart TD
     self["<b>Self‑hosted&nbsp;policy&nbsp;(recommended)</b><br/>Serve your policy locally,<br/>on a cloud server, or<br/>serverless deployment"]
     cloud["<b>Manifold cloud</b><br/>Containerize your<br/>policy to run on<br/>Manifold servers"]
     serve["/serve-policy<br/>Writes a single script<br/>that serves your policy<br/>where it is"]
-    csetup["/setup-manifold<br/>Understand the user's project, workflow, and hardware"]
-    wrap["/wrap-policy<br/>Prepare the user's policy as a standalone container image. Ensures compatibility, then sends off a live test run (skipped when the current machine cannot run the model)."]
-    cont["/containerize-wrap<br/>Build the image containing the model. Push it and register it."]
+    cont["/containerize-policy<br/>Records the project's context, wraps the policy and tests it, then builds the image, pushes it, and registers it"]
     run["Run evaluations"]
 
-    start --> self --> serve ----> run
-    start --> cloud --> csetup --> wrap --> cont --> run
+    start --> self --> serve --> run
+    start --> cloud --> cont --> run
 ```
 
 ### Self-hosted policy
@@ -56,17 +54,19 @@ or episodes, so you get a first score quickly.
 
 ### Manifold cloud
 
-Run `/setup-manifold`. Your agent asks about your project and hardware, then
-continues with `/wrap-policy` and `/containerize-wrap`.
+Choose this path to run your policy on Manifold's GPUs. Run
+`/containerize-policy` inside your policy project. Your agent asks about your
+project and hardware. It writes a Python wrapper around your model and tests
+it. Then it builds a container image with your model and registers it with
+Manifold. Your agent asks before each step that pushes, registers, or spends
+cloud time.
 
 ## Skills
 
 | Skill | When to use it |
 |---|---|
 | [`serve-policy`](skills/serve-policy/SKILL.md) | Your policy runs locally, on a cloud server, or on a serverless deployment. Your agent writes a script that serves it from there. |
-| [`setup-manifold`](skills/setup-manifold/SKILL.md) | Start here for Manifold cloud. Your agent asks about your project and hardware. |
-| [`wrap-policy`](skills/wrap-policy/SKILL.md) | Your policy should run on Manifold's machines. Your agent writes a Python wrapper around your model and tests it. Run `setup-manifold` first. |
-| [`containerize-wrap`](skills/containerize-wrap/SKILL.md) | Run it after `wrap-policy`. Your agent builds a container image with your model and registers it with Manifold. You need a container registry. |
+| [`containerize-policy`](skills/containerize-policy/SKILL.md) | Your policy should run on Manifold's GPUs. Your agent wraps your model, builds a container image, and registers it with Manifold. You need a container registry. |
 
 ## Structure
 
