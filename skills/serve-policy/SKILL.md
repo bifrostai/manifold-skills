@@ -9,7 +9,7 @@ description: >
   equivalent.
 compatibility: >
   Run from the user's policy project directory. Needs the manifold CLI,
-  logged in, with `manifold policy serve NAME --version VERSION -- COMMAND`.
+  logged in, with `manifold policy serve NAME:VERSION -- COMMAND`.
   Needs a manifold-sdk revision that exports `manifold.serve`. This machine
   must be able to run the model, so it needs a GPU.
 ---
@@ -36,9 +36,11 @@ that the signature declares. They flip or rotate images, resize them, and
 convert rotation formats. The signature must therefore describe what the
 raw model expects, instead of what the benchmark sends.
 
-`manifold policy serve` registers the policy and this machine, then waits.
-When a run arrives, it starts the script as a child process in the same
-directory and with the same environment.
+`manifold policy serve` starts the script once, in the same directory and
+with the same environment. When the script accepts connections, serve
+registers the policy and this machine, and prints a line that starts with
+`Ready`. Every run that the user submits for that version goes to this
+script, so the model loads only once.
 
 When complete, the user should have `manifold-sdk` installed in the
 project, alongside a new serving script for their policy-benchmark pair.
@@ -105,8 +107,8 @@ escalated command confirms that this machine has no GPU. If the sandbox
 blocks the GPU, run each later command that loads the model with
 escalated permissions too. This applies to `manifold policy serve`.
 
-**Tools.** Run `manifold policy serve --help`. The help must show a
-`--version` option. If it does not, stop and tell the user to upgrade the
+**Tools.** Run `manifold policy serve --help`. The help must show
+`<identifier>:<version>`. If it does not, stop and tell the user to upgrade the
 CLI with `uv tool upgrade manifold-cli`. Run `manifold auth status`. If
 the user is not logged in, ask them to run `manifold auth login`.
 
@@ -256,22 +258,23 @@ network. If the harness cannot run a background process outside the
 sandbox, ask the user to run the command in their own terminal:
 
 ```
-manifold policy serve <policy> --version v1 -- uv run .manifold/serve_<policy>_<benchmark>.py
+manifold policy serve <policy>:0.0.1 -- uv run .manifold/serve_<policy>_<benchmark>.py
 ```
 
-Use `v1` unless the user named a version. Wait for the line
-`Waiting for work...`.
+Use `0.0.1` unless the user named a version. The script loads the model
+first, which can take minutes. Wait for the line that starts with `Ready`.
 
 **Run the debug benchmark.** Submit a run against the debug variant of
 the chosen benchmark, then follow it:
 
 ```
-manifold run submit <policy> debug-<family> --name <policy>-debug
+manifold run submit <policy>:0.0.1 debug-<family> --name <policy>-debug
 manifold run watch <run-id>
 ```
 
 Read the output of `manifold policy serve` while the run is in progress.
-It shows the script's start and any traceback.
+It shows the output of the script and any traceback. The run's log in the
+app shows the same lines.
 
 The run must get a non-zero score. If the run fails, or if the debug run
 completes with all tasks and episodes scoring zero, go to
@@ -291,23 +294,26 @@ find the runner with `manifold runner list` and remove it with
 ## Troubleshooting
 
 After each fix, stop the serve process with Ctrl-C, and serve again
-under a new version, such as `v2`. Manifold lists runs under their
+under a new version, such as `0.0.2`. Manifold lists runs under their
 version string. With a new string, the runs of the fixed script appear
 apart from the failed runs.
 Then submit the debug run again.
 
 ### The run does not start or finish
 
-- **The run stays queued.** The serve process has stopped, or it serves
-  a different policy name or version. Check that it is still running,
-  and that its name and version match the run.
-- **The script fails before the run starts.** The serve output shows the
+- **`run submit` says that the version is not ready yet.** The serve
+  process has stopped, it has not printed `Ready` yet, or it serves a
+  different version. Check that it is still running, and that the
+  version in `run submit` matches the version in `policy serve`.
+- **The run stays queued.** The serve process takes one run at a time.
+  The run starts when the previous run ends.
+- **The script exits before `Ready`.** The serve output shows the
   traceback. An import error usually means that the serve command used a
   different environment. Start the serve command from the project root,
   with the project's own run command.
-- **The runner gives up while the model loads.** The runner waits 15
-  minutes for the script to open its port. If the weights take longer to
-  download, download them once before you serve.
+- **Serve stops while the model loads.** Serve waits 15 minutes for the
+  script to accept connections. If the weights take longer to download,
+  download them once before you serve.
 - **The run fails as it connects, with a `ValueError`.** The adapters
   cannot convert the benchmark's data into the signature. Compare the
   camera names, the robot state and the action type in the signature

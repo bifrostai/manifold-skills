@@ -165,8 +165,8 @@ Three consequences follow:
 1. **One image per wrap.** The `CMD` in the Dockerfile picks which wrap the
    container serves. Registration cannot override it.
 2. **Tags become versions.** `manifold policy init` reads the image tag and
-   uses it as the version string. Never reuse a tag; old tags are
-   immutable.
+   uses it as the version string. Never reuse a tag. Re-running
+   `manifold policy init` on an existing tag with new settings fails.
 3. **Nothing local proves the image works in production conditions.**
    A clean local `docker run` only shows that the server starts.
    Whether the platform can pull, schedule, drive, and score the image
