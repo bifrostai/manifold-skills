@@ -108,10 +108,12 @@ model with escalated permissions too. This applies to
 
 The user or an escalated command may confirm that this machine has no
 GPU. Then offer the user two options. The user can move this session to
-a machine with a GPU. The user can also serve the policy from a GPU
-container on a cloud platform, as the "Serve from a cloud container"
-section describes. If the project deploys to a cloud platform, offer
-that platform first.
+a machine with a GPU. That machine can be a cloud VM, such as an AWS EC2
+instance or a GCP Compute Engine instance. For a cloud VM, also read
+[references/cloud-vm.md](references/cloud-vm.md). The user can also
+serve the policy from a GPU container on a cloud platform, as the "Serve
+from a cloud container" section describes. If the project deploys to a
+cloud platform, offer that platform first.
 
 **Tools.** Run `manifold policy serve --help`. The help must show
 `<identifier>:<version>`. If it does not, stop and tell the user to upgrade the
