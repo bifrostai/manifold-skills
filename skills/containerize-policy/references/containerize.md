@@ -1,27 +1,8 @@
----
-name: containerize-wrap
-description: >
-  Package a verified policy wrap as a container image for the Manifold platform,
-  then build it, push it to a container registry, register it, and run it. Use
-  when asked to "containerize my policy", "build the policy image", "push my
-  wrap to ghcr", "register my policy on the platform", or "get my wrap running
-  on the platform". This skill is for the case where the model loads into the
-  container. For policies where the model runs on the user's own inference
-  server, use `/containerize-remote-wrap` instead.
-compatibility: >
-  Run this skill from the user's policy project directory, after
-  `/wrap-policy` has written the wrap files under
-  `<project>/.manifold/<slug>/`. Requires docker, a push credential for
-  the target container registry (ghcr by default), and the manifold CLI
-  authenticated with `manifold auth login`. Input is a wrap that passes
-  check_compatibility and verify under wrap-policy.
----
+# Stage 3: Containerize and register
 
-## Summary
-
-Take a wrap from the `wrap-policy` skill (a Python module that exports
-`PROFILE`, `BENCHMARK`, and `PIPELINE`) and get it running on the Manifold
-platform.
+Stage 3 takes the wrap from Stage 2 (a Python module that exports
+`PROFILE`, `BENCHMARK`, and `PIPELINE`) and gets it running on the
+Manifold platform.
 
 The output is four things:
 
@@ -30,7 +11,7 @@ The output is four things:
    context.
 2. **A launcher script** written to `<project>/.manifold/<slug>/serve.py`.
    It imports the pairing module from `.manifold/<slug>/` and calls
-   `launch_server`. Phase 3 shows the exact code to paste in.
+   `launch_server`. Phase 9 shows the exact code to paste in.
 3. **A container image** pushed to the registry at the agreed name and
    tag (e.g. `ghcr.io/<org>/policy-<slug>:0.1.0`).
 4. **A registered policy version** on the Manifold platform. This is a
@@ -40,92 +21,18 @@ The output is four things:
 Files 1 and 2 are new files on disk. The other two live on the registry
 and on the platform.
 
-This skill is for the case where the model loads into the built
-container. If the model runs on the user's own inference server (Modal
-endpoint, private HTTPS box), use `/containerize-remote-wrap` instead.
+Once all four exist, Stage 3's main work is done. Then ask the user
+whether to submit a scored test run against a benchmark of their
+choice (Phase 10 walks through it). Do not submit a run on your own.
 
-Once all four exist, the skill's job is done. After that, ask the user
-whether to submit a scored test run against a benchmark of their choice
-(Phase 4 walks through it). Do not submit a run on your own.
-
-This skill does not fix wrap bugs. If the wrap does not pass both
-`check_compatibility` and `verify`, go back to `wrap-policy` first.
-
-## Rules
-
-**Confirm before doing anything else.** First thing after this skill
-loads, tell the user in your own words what it will do and why:
-building a Docker image (10 to 30 GB of local disk), pushing it to their
-registry, and registering it on Manifold, so the platform can pull and
-run their policy against benchmarks. Wait for a yes before reading
-`CONTEXT.md` or touching anything. Push, register, and submit still
-have their own per-step confirmations later.
-
-**Speak to the user in their language, not the SDK's.** The user has
-not read the SDK docs. They will not recognize Docker fields,
-registry commands, or CLI flag names. The skill below names those
-identifiers freely because you need them to write correct code.
-When narrating progress to the user, translate.
-
-Say things like:
-- "I'll build the image that contains your policy."
-- "The image built and pushed to your registry."
-- "Registered on Manifold as version 0.1.0."
-- "The scored test run finished. The score is X."
-
-Not the identifiers from the Dockerfile snippets or CLI examples
-below. If the user uses one of those terms themselves, follow
-their lead. Otherwise, describe what happened and why it matters.
-
-**Run in the user's policy directory.** Once the user has said yes,
-confirm the current working directory is their policy project. The
-same one `/setup-manifold` and `/wrap-policy` ran in. Look for
-`<project>/.manifold/CONTEXT.md` and `.manifold/<slug>/` (with the
-wrap files inside). If either is missing, stop and ask the user to run
-the earlier skills first.
-
-**Read `.manifold/CONTEXT.md` first.** setup-manifold already recorded
-the package manager, registry, weights location, deployment style,
-GPU / VRAM, and benchmarks of interest; wrap-policy added anything
-else it learned. Read `CONTEXT.md` before asking the user anything;
-ask only about details it does not cover.
-
-**Stop if this is a hosted-endpoint policy.** If `CONTEXT.md` has
-`model_runtime = hosted_endpoint`, this skill is the wrong one. Stop
-and point the user at `/containerize-remote-wrap`, which packages
-wraps for policies that run on the user's own inference server.
+Stage 3 does not fix wrap bugs. If the wrap does not pass both
+`check_compatibility` and `verify`, go back to Phase 6 first.
 
 **Write into `.manifold/<slug>/`.** The `Dockerfile` and `serve.py`
-this skill produces both live under
+that Stage 3 produces both live under
 `<project>/.manifold/<slug>/`, next to the wrap files. `docker build`
 runs with the project root as the build context so the whole project
 is available to `COPY`.
-
-**Do not run this skill without an explicit user invocation.** If another
-skill (for example `/wrap-policy`) has just finished, stop and wait for
-the user to ask for containerization by name. Do **not** chain into this
-skill on your own after "the wrap is proven" or any similar success line.
-Each step in the Manifold flow is a separate skill so the user can
-review the previous step's output before spending registry storage and
-cloud time; auto-chaining skips that review.
-
-**Plan the entire task in a to-do list before you start, and update it as
-you go.** Use whichever planning tool your harness provides:
-
-- **Claude Code:** `TaskCreate` to seed the plan, `TaskUpdate` to move items
-  between `pending` / `in_progress` / `completed`, `TaskList` / `TaskGet` to
-  read state.
-- **Codex:** use `update_plan` to create and maintain an ordered plan, with
-  exactly one item `in_progress` at a time. Keep the scored test run as an
-  explicit item until it passes.
-- **Other harnesses:** check the harness for a to-do list or planning tool
-  before using the fallback below.
-- **No planning tool available:** keep the plan as a plain-text checklist in
-  your responses and re-post it (with statuses updated) each time you advance.
-
-The intent is (1) to **structure the work** so nothing gets skipped, and
-(2) to **stay accountable and informative** by updating the list as steps
-start and finish, so the user can follow along without asking.
 
 **Ask the user before every step that costs money or writes to a shared
 system.** Each of the choices below costs the user time, cloud credits, or
@@ -144,12 +51,12 @@ declines any of these, stop the skill there; do not skip to the next
 step.**
 
 The **policy name** (the thing that becomes `<slug>` in
-`manifold policy init <slug>`) is **not** on that list. setup-manifold
-picks it and hands it here. Do not rename the policy on the user's
+`manifold policy init <slug>`) is **not** a choice that this stage
+makes. Stage 1 records it in `CONTEXT.md`. Do not rename the policy on the user's
 behalf. If the slug is missing, ask the user once for it.
 
 The container image name (registry, namespace, tag) is a
-container-registry concept, not a user-facing choice. This skill
+container-registry concept, not a user-facing choice. This stage
 constructs it from the policy slug plus the org's registry and
 namespace.
 
@@ -175,18 +82,18 @@ Three consequences follow:
 
 ---
 
-## Phase 1: Understand the inputs
+## Phase 7: Understand the inputs
 
 Do this before writing a Dockerfile. You need the wrap module path, the
 policy name, and the manifold-sdk revision pinned down first.
 
 **The wrap.** Confirm the wrap passes both `check_compatibility` and
-`verify` under `wrap-policy`. Record the module path that exports
+`verify` from Phase 6. Record the module path that exports
 `PROFILE`, `BENCHMARK`, and `PIPELINE`. The Dockerfile's `CMD` will name
 it.
 
 **The policy name.** This is the slug used in `manifold policy init
-<slug>`. setup-manifold picks it (or the user does directly). If it
+<slug>`. Stage 1 records it in `CONTEXT.md`. If it
 is missing, ask the user once for it. Do not invent one.
 
 **The image name.** Built from the policy slug plus the org's registry
@@ -205,23 +112,21 @@ line from the policy's subsection in `.manifold/CONTEXT.md`. It is the
 full Git commit SHA installed when the wrap passed `check_compatibility`
 and `verify`. Install `manifold-sdk` from that revision instead of
 resolving the repository again. If the line is missing, return to
-`/wrap-policy`. Start with the most recent commit on the `manifold-sdk`
-GitHub repository's default branch, then record its full SHA after the
-wrap passes both checks.
+"Prepare the project for the wrap" in Stage 2, then rerun both checks.
 
-> **Phase 1 checkpoint.** Record before designing:
+> **Phase 7 checkpoint.** Record before designing:
 > ```
 > wrap_module      = ?  (e.g. mywrap.mypolicy_mybench)
-> checks_pass      = yes (link to wrap-policy handoff)
-> policy_slug      = ?  (source: setup-manifold | user)
+> checks_pass      = yes (from Phase 6)
+> policy_slug      = ?  (source: CONTEXT.md | user)
 > image_name       = <registry>/<namespace>/policy-<slug>:<tag>
->                    (constructed by this skill from the slug)
+>                    (constructed by this stage from the slug)
 > sdk_revision     = ?  (from the policy's manifold-sdk revision line)
 > ```
 
 ---
 
-## Phase 2: Design the Dockerfile
+## Phase 8: Design the Dockerfile
 
 Decide what the image will contain before writing any of it. Everything in
 this phase is a decision, not implementation.
@@ -311,10 +216,10 @@ Two ways to get the model checkpoint into the running container:
 
 The container's `CMD` runs a small launcher script that imports the wrap
 module and hands its `PROFILE` / `BENCHMARK` / `PIPELINE` to
-`launch_server`. Phase 3 shows the launcher and the `CMD` line. Nothing
+`launch_server`. Phase 9 shows the launcher and the `CMD` line. Nothing
 else in the image needs to know about the wrap.
 
-> **Phase 2 checkpoint:**
+> **Phase 8 checkpoint:**
 > ```
 > base_image         = ?  (pinned by digest)
 > project_pin        = ?  (git commit ARG | tarball snapshot path)
@@ -323,7 +228,7 @@ else in the image needs to know about the wrap.
 
 ---
 
-## Phase 3: Build and push the image
+## Phase 9: Build and push the image
 
 Write the Dockerfile and build it. On a GPU box, run it locally to prove
 the server starts; on a CPU-only box, skip the local run. Then push it
@@ -430,7 +335,7 @@ Skip this step on a CPU-only machine. A robotics policy needs a GPU to
 load and serve, so a CPU-only local run only tells you whether Python
 could import, not whether the container actually works. On CPU-only,
 proceed straight to Push; the container will first be exercised for
-real when the user submits a run in Phase 4.
+real when the user submits a run in Phase 10.
 
 On a GPU box, start the container and confirm the server prints its
 listening line:
@@ -479,7 +384,7 @@ Either way, a pull failure at run time surfaces as a scheduling or pull
 error, not "permission denied", so if the platform can't reach the
 image, the run just looks broken.
 
-> **Phase 3 checkpoint:**
+> **Phase 9 checkpoint:**
 > ```
 > build_exit_code        = 0
 > listening_line         = yes | no | skipped (CPU-only local box)
@@ -491,7 +396,7 @@ image, the run just looks broken.
 
 ---
 
-## Phase 4: Register, then offer a test run
+## Phase 10: Register, then offer a test run
 
 Register the image. Then ask the user whether to submit a scored test run.
 Do not submit one on your own.
@@ -605,9 +510,8 @@ encoding, or a wrong proprioception mapping all pass `check_compatibility`
 and `verify`. They only show up here as a score near zero.
 
 A near-zero score on a suite the checkpoint is known to handle means a
-wrap bug until proven otherwise. Go back to `wrap-policy` Phase 3, fix
-the pipeline or session, bump the tag, and re-enter this skill at
-Phase 3.
+wrap bug until proven otherwise. Go back to Phase 6, fix the pipeline
+or session, bump the tag, and continue from Phase 9.
 
 ### If the container ran out of GPU memory
 
@@ -647,10 +551,10 @@ OOMs again, repeat with a higher floor. Each retry needs a fresh
 user yes. Do not silently keep bumping.
 
 Also update `CONTEXT.md`'s peak-VRAM entry for this policy to the
-value that actually worked, so future runs of setup-manifold don't lowball
-again.
+value that actually worked. Later runs of this skill then start from
+that value.
 
-> **Phase 4 checkpoint:**
+> **Phase 10 checkpoint:**
 > ```
 > slug                          = ?
 > version                       = ? (from image tag)
@@ -682,17 +586,17 @@ again.
 
 ---
 
-## Final checklist
+## Stage 3 checklist
 
-Inputs
+### Inputs
 
-- [ ] Wrap passes `check_compatibility` and `verify` under `wrap-policy`
-- [ ] Policy slug received from setup-manifold (not invented); image
+- [ ] Wrap passes `check_compatibility` and `verify` from Phase 6
+- [ ] Policy slug read from `CONTEXT.md` (not invented); image
       name constructed from it
 - [ ] manifold-sdk in the image is installed from the policy's
       **manifold-sdk revision** in `.manifold/CONTEXT.md`
 
-Image contents
+### Image contents
 
 - [ ] Base image pinned by digest, not by a floating tag like `latest`
 - [ ] Project source pinned (git commit `ARG` or snapshot tarball) so
@@ -705,13 +609,13 @@ Image contents
 - [ ] No credentials baked into the image (no `ENV HF_TOKEN=...`, no
       copied `~/.aws/credentials`, no copied `~/.huggingface/token`)
 
-Dockerfile rules
+### Dockerfile rules
 
 - [ ] Dockerfile builds without errors
 - [ ] Image built for `linux/amd64` (`docker buildx build --platform
       linux/amd64` on any arm64 machine)
 - [ ] On a GPU box, container starts and prints its listening line;
-      on a CPU-only box, skipped (rely on Phase 4)
+      on a CPU-only box, skipped (rely on Phase 10)
 - [ ] Port 8000, bound on `0.0.0.0`
 - [ ] `PYTHONUNBUFFERED=1` set
 - [ ] Bash present in the image
@@ -720,7 +624,7 @@ Dockerfile rules
 - [ ] GPU pre-allocation disabled where the framework does it by
       default (e.g. JAX)
 
-Push and register
+### Push and register
 
 - [ ] Tag never reused; Dockerfile and launcher saved before push
 - [ ] Push confirmed by the user
@@ -729,7 +633,7 @@ Push and register
       `--minimum-gpu-memory-gb` (never 0 for GPU models)
 - [ ] User was offered a scored test run and given the choice
 
-If the user asked for a test run:
+### Scored test run, if the user asked for one
 
 - [ ] Benchmark chosen by the user; submit confirmed before running
 - [ ] `manifold benchmark list` checked for a debug variant of the
@@ -744,3 +648,5 @@ If the user asked for a test run:
       (no rebuild); new tag re-registered with a higher
       `--minimum-gpu-memory-gb`; `CONTEXT.md`'s peak VRAM updated to
       what worked
+
+---

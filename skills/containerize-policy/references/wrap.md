@@ -1,20 +1,6 @@
----
-name: wrap-policy
-description: >
-  Wrap a researcher's policy for the Manifold platform, then prove it with
-  check_compatibility, verify, and a live run of the driver (the live run
-  is skipped, with the user's consent, on a machine that cannot run the
-  model). Use when the model loads into the built container. For policies where the model
-  runs on the user's own inference server (Modal, private HTTPS box),
-  use `/wrap-remote-policy` instead.
-compatibility: >
-  Run this skill from the user's policy project directory, after
-  `/setup-manifold` has written `<project>/.manifold/CONTEXT.md`. Everything this
-  skill writes goes inside `<project>/.manifold/<slug>/`, where `<slug>`
-  is the policy name recorded in `CONTEXT.md`.
----
+# Stage 2: Wrap the policy
 
-## Summary
+For the SDK's import paths, see `sdk-imports.md` in this folder.
 
 Use the manifold-sdk to write the files that let a Manifold benchmark
 run the user's policy. The output is a folder of Python files. Three
@@ -29,69 +15,19 @@ words as labels for the files throughout:
 
 Together these files are called the **wrap**.
 
-This skill is for the case where the model loads into the built
-container. If the model runs on the user's own inference server (Modal
-endpoint, private HTTPS box), use `/wrap-remote-policy` instead.
-
 All conversions and transformations happen in the wrap. The benchmark
 side is fixed.
 
-Your task is complete when both `check_compatibility` and `verify` pass AND
+Stage 2 is complete when both `check_compatibility` and `verify` pass AND
 the wrap runs cleanly under `evaluate`. The two checks pass specs and dummy
 data through the PIPELINE only. Any wrong gripper polarity, action width, or
 proprioception can pass them but crash (or fail silently) at runtime, which
 is why the live `evaluate` run is mandatory. One exception: on a machine
-that cannot run the model, the task is complete when both checks pass, the
+that cannot run the model, Stage 2 is complete when both checks pass, the
 `evaluate` run is skipped, and the handoff says so (see "Run the wrap").
 
-## Rules
-
-**Confirm before doing anything else.** First thing after this skill
-loads, tell the user in your own words what it will do and why:
-adding `manifold-sdk` to the project's deps and creating files under
-`<project>/.manifold/`, both so the wrap can run in their own
-environment against their own model code. Wait for a yes before
-reading `CONTEXT.md` or touching anything.
-
-**Speak to the user in their language, not the SDK's.** The user has
-not read the SDK docs. They will not recognize class names, method
-names, config fields, or enum values. The skill below names those
-identifiers freely because you need them to write correct code.
-When narrating progress to the user, translate.
-
-Say things like:
-- "I'll write the files that let the benchmark run your policy."
-- "The wrap passes the SDK's compatibility check."
-- "The test run finished without errors."
-- "Some parts of the wrap were not tested by the check."
-
-Not the identifiers from the code blocks below. If the user uses
-one of those terms themselves, follow their lead. Otherwise,
-describe what happened and why it matters.
-
-**Run in the user's policy directory.** Once the user has said yes,
-confirm the current working directory is their policy project: the
-same one `/setup-manifold` ran in. Look for `<project>/.manifold/CONTEXT.md` at
-the root; if it does not exist, stop and ask the user to run `/setup-manifold`
-first. If the current directory does not look like their policy project
-(no `pyproject.toml` / `requirements.txt` or similar), ask for the
-correct path.
-
-**Read `.manifold/CONTEXT.md` next.** setup-manifold already
-interviewed the user and recorded everything wrap-policy would
-otherwise ask: package manager, source folders, weights location,
-GPU / VRAM, deployment style, registry, and the policy slug and
-benchmarks of interest. Read that file before asking the user
-anything else; ask only about details `CONTEXT.md` does not already
-cover.
-
-**Stop if this is a hosted-endpoint policy.** If `CONTEXT.md` has
-`model_runtime = hosted_endpoint`, this skill is the wrong one. Stop
-and point the user at `/wrap-remote-policy`, which handles wraps for
-policies that run on the user's own inference server.
-
-**Check whether this machine can run the model, before Phase 1.**
-Phase 3 finishes with a test run that loads the user's real
+**Check whether this machine can run the model, before Phase 4.**
+Phase 6 finishes with a test run that loads the user's real
 checkpoint, and that run needs Linux and an NVIDIA GPU. No earlier
 step needs a GPU. `CONTEXT.md` records the answer as
 `can_run_model_locally`, and records `os`, `arch`, and `gpu_present`
@@ -101,17 +37,16 @@ yourself: `uname -s`, `uname -m`, `nvidia-smi`.
 A machine that cannot run the model does not block the wrap, but the
 user decides. If `CONTEXT.md` already records
 `local_test_run_possible = no`, the user said yes to this during
-`/setup-manifold`. Restate it in one sentence and continue. If the
+Stage 1. Restate it in one sentence and continue. If the
 field is absent, ask now: the wrap cannot be tested on this machine
 because it has no GPU, so do they want to proceed anyway? On a yes,
 record `local_test_run_possible = no` in `CONTEXT.md`, write the
 wrap, run both checks, and skip the test run as described under
 "Run the wrap". On a no, stop, and help them move to a machine with
-a GPU or switch to `/wrap-remote-policy`.
+a GPU.
 
-**Jobs setup-manifold delegated to this skill.** setup-manifold wrote
-`CONTEXT.md` and nothing else. Once you've read it, do these before
-writing any wrap code:
+**Prepare the project for the wrap.** Stage 1 wrote `CONTEXT.md` and
+nothing else. Do these before writing any wrap code:
 
 - Add `manifold-sdk` to the project's dependency file **and** install
   it into the project's environment. Start with the most recent commit
@@ -132,24 +67,6 @@ writing any wrap code:
   hand the error to the user.
 - Create the folder `<project>/.manifold/<slug>/`. The slug is in
   `CONTEXT.md`. All wrap files below live inside it.
-
-**Plan the entire task in a to-do list before you start, and update it as
-you go.** Use whichever planning tool your harness provides:
-
-- **Claude Code:** `TaskCreate` to seed the plan, `TaskUpdate` to move items
-  between `pending` / `in_progress` / `completed`, `TaskList` / `TaskGet` to
-  read state.
-- **Codex:** use `update_plan` to create and maintain an ordered plan, with
-  exactly one item `in_progress` at a time. Keep validation as an explicit item
-  until it passes.
-- **Other harnesses:** check the harness for a to-do list or planning tool
-  before using the fallback below.
-- **No planning tool available:** keep the plan as a plain-text checklist in
-  your responses and re-post it (with statuses updated) each time you advance.
-
-The intent is (1) to **structure the work** so nothing gets skipped, and
-(2) to **stay accountable and informative** by updating the list as steps
-start and finish, so the user can follow along without asking.
 
 ## Folder structure
 
@@ -172,7 +89,7 @@ All wrap files live under `<project>/.manifold/<slug>/`, where
 
 ---
 
-## Phase 1: Understand the policy and target benchmark
+## Phase 4: Understand the policy and target benchmark
 
 Do this before writing any Manifold code. You need a full picture of both sides
 to design anything.
@@ -245,7 +162,7 @@ orientation in one of two ways:
   dataset, stop. Guessing the orientation is the known cause of LIBERO
   scores near zero.
 
-Record the answer, and the evidence for it, in the Phase 1 checkpoint.
+Record the answer, and the evidence for it, in the Phase 4 checkpoint.
 
 ### Benchmark side
 
@@ -259,7 +176,7 @@ project's vendored copy.
 **If the benchmark is not available**, stop and notify the user. The benchmark
 must be authored first.
 
-> **Phase 1 checkpoint.** Record before designing anything:
+> **Phase 4 checkpoint.** Record before designing anything:
 > ```
 > Policy side:
 >   action_width      = ?  (source: file:line)
@@ -288,7 +205,7 @@ must be authored first.
 
 ---
 
-## Phase 2: Design the signature, layouts, and profile
+## Phase 5: Design the signature, layouts, and profile
 
 Decide what your wrap will look like before writing any code. Everything here
 is a decision, not implementation.
@@ -379,7 +296,7 @@ load time.
   kills the connection pre-READY: `PairingRejected("policy rejected the
   pairing (no READY)")`.
 
-> **Phase 2 checkpoint:**
+> **Phase 5 checkpoint:**
 > ```
 > PolicySignature:
 >   action_space        = {type}(rotation=?, gripper=?, delta=?, frame=?, chunk_size=1)
@@ -396,7 +313,7 @@ load time.
 
 ---
 
-## Phase 3: Implement the wrap
+## Phase 6: Implement the wrap
 
 Write the driver, assemble the pipeline, pass both checks, then prove it live.
 
@@ -656,7 +573,7 @@ Both orientation values describe the image relative to the real scene. The
 adapter converts from the benchmark's declared orientation to the policy's
 declared orientation. `verify` cannot test orientation with synthetic data,
 so the policy's declared orientation must come from the evidence in the
-Phase 1 checkpoint. Do not guess it.
+Phase 4 checkpoint. Do not guess it.
 
 ### Run the wrap (MANDATORY)
 
@@ -668,7 +585,7 @@ only when the machine cannot (`local_test_run_possible = no` in
 `CONTEXT.md`, or `can_run_model_locally = no`). When you skip it, say
 three things in the handoff: the wrap passed both checks, the driver
 has not run yet, and the first full test happens when the user
-submits a run after `/containerize-wrap`. Do not describe the wrap as
+submits a run in Stage 3. Do not describe the wrap as
 verified.
 
 Use `evaluate` to run the wrap in a single Python process with no server. Any
@@ -705,7 +622,7 @@ without raising an exception? If both episodes finish
 without an exception, proceed to the handoff. Do not go back and
 edit the wrap to make the episodes match.
 
-> **Phase 3 checkpoint:**
+> **Phase 6 checkpoint:**
 > ```
 > Pipeline observation adapters: [list, in order]
 > Pipeline action adapters:      [list, in order]
@@ -735,7 +652,7 @@ edit the wrap to make the episodes match.
 
 ---
 
-## Final checklist
+## Stage 2 checklist
 
 - [ ] The policy's **manifold-sdk revision** line in
       `.manifold/CONTEXT.md` records the full SDK commit SHA used for
@@ -762,87 +679,4 @@ edit the wrap to make the episodes match.
       skipped, `local_test_run_possible = no` recorded, and the
       handoff says the driver has not run
 - [ ] Handoff states what was and was not proven
-
----
-
-## Stop here, hand back to the user
-
-The skill ends at the checklist above. Do **not** invoke another skill
-automatically. In particular, do **not** call `/containerize-wrap` on
-your own after saying "the wrap is proven"; that skill costs registry
-storage and often cloud time, and the user has to opt in first. Each
-step in the Manifold flow is a separate skill by design; auto-chaining
-skips the user's chance to review.
-
-**Keep the handoff SHORT.** A long summary reads as "we're done." The
-user needs to see, at a glance, that there is a next step. Aim for
-under 8 lines total, and put the next step in a visible box so it
-does not get buried in prose.
-
-Do NOT restate the wrap's design. Do NOT list what was done in Phase
-1 or Phase 2. Do NOT review the checks. The user watched those
-happen; the handoff is about what is next.
-
-Use this exact shape:
-
-1. **One line: status.** Example: "Wrap is written and passes the
-   checks."
-2. **One line: what got made.** The module path and the pairing name.
-3. **Caveats, only if any.** One line each. `verify` entries under
-   `not_checked`, or a credential the user still needs to arrange.
-   Skip this entirely if there are none.
-4. **Next step, boxed.** Present the next skill as a bordered
-   call-out so it stands apart from the prose. For example:
-
-   ```
-   ┌────────────────────────────────────────────────────────┐
-   │  NEXT: run  /containerize-wrap                         │
-   │  Packages the policy and registers it on Manifold.     │
-   └────────────────────────────────────────────────────────┘
-   ```
-
-   A one-row markdown table works too, if box-drawing characters
-   render badly in the harness:
-
-   | Next step | What it does |
-   |---|---|
-   | Run `/containerize-wrap` | Package the policy and register it on Manifold. |
-
-Then stop. Wait for the user to invoke the next skill.
-
----
-
-## Reference: import paths
-
-- `manifold.recipes`. `read_pairing`, `launch_server`, `serve`, `evaluate`,
-  `run_benchmark`, `run_sharded_benchmark`, `run_episodes`, `write_rollup`,
-  `OpenLoopChunkQueue`, `ChunkEndpoint`, `PolicyProfile`, `resolve`,
-  `from_lerobot_checkpoint` / `SignatureSuggestion`, `describe`, `Recorder`,
-  `dump`, `load`, `NO_RECORDER`
-- `manifold.recipes.serving`. `PolicyEndpoint` and `Session` protocols (NOT
-  re-exported by `manifold.recipes`)
-- `manifold.core.check`. `check_compatibility` returns `Report`
-- `manifold.core.verify`. `verify` returns `VerifyReport`
-- `manifold.core.pipeline`. `Pipeline`
-- `manifold.core.policy`. `PolicySignature`
-- `manifold.core.embodiment`. `EEActionSpace`, `JointActionSpace`,
-  `UnifiedActionSpace`, `Proprioception`, `EEObservationSpec`,
-  `GripperObservationSpec`
-- `manifold.core.conventions`. `RotationFormat`, `GripperFormat`, `Frame`
-  (pass enum members, never string values)
-- `manifold.core.native_layout`. `NativeLayout`, `LayoutEntry`
-  (`.from_camera` / `.from_state` / `.from_instruction`), `SourceKind`,
-  `Slice`, `Split`, `BatchAxis`, `DtypeCast`, `Component`, `Assemble`
-- `manifold.benchmarks`. `ALL`, `LIBERO`, `SIMPLER`, `ROBOCASA`
-- `manifold.adapters`. `PackToNativeLayout`, `UnpackFromNativeLayout`,
-  `ObservationTap`, `ActionTap` (convention adapters are one level down)
-- `manifold.adapters.observation`. `ProprioRotationAdapter`,
-  `FrameRebaseAdapter`, `DynamicFrameRebaseAdapter`, `ObservedGripperAdapter`,
-  `ResizeCameras`, `Rotate180Cameras`, `FlipVerticalCameras`,
-  `SwapChannelOrder`, `StackFrameHistory`
-- `manifold.adapters.action`. `RotationFormatAdapter`,
-  `GripperPolarityAdapter`, `GripperThresholdAdapter`,
-  `UnifiedGripperThresholdAdapter`, `UnifiedSliceAdapter`, `BasePinWiden`,
-  `DiscreteBinarize`
-- `manifold.lib.rotation.convert`. Driver-side rotation re-encode
-- `manifold.lib.gripper`. Action-side gripper remaps
+- [ ] Asked whether to continue before starting Stage 3
