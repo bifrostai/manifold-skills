@@ -76,11 +76,11 @@ All wrap files live under `<project>/.manifold/<slug>/`, where
 | File | Description | Imports the model? |
 |---|---|---|
 | `.manifold/<slug>/driver.py` | endpoint + session | yes |
-| `.manifold/<slug>/profile.py` | frozen dataclass: signature, weights, chunk, exec_steps, layouts, `load()` | no |
+| `.manifold/<slug>/profile.py` | frozen dataclass: signature, weights, layouts, `load()` | no |
 | `.manifold/<slug>/<benchmark>.py` | pairing file, exports `PROFILE` / `BENCHMARK` / `PIPELINE` (one file per benchmark) | no |
 
 - `driver.py` loads the model onto the GPU and runs it.
-- `profile.py` is a lightweight spec describing what the model expects (image sizes, state shape, chunk length, weights path).
+- `profile.py` is a lightweight spec describing what the model expects (image sizes, state shape, weights path).
 - `<benchmark>.py` is the pairing file. It builds the signature and layouts, instantiates the profile, and declares `PROFILE`, `BENCHMARK`, and `PIPELINE`.
 
 `PROFILE` points at the model spec (from profile.py)
@@ -108,8 +108,13 @@ implemented in the policy wrap, such as image resize, gripper sign and threshold
 and normalization.
 
 **Identify the chunk numbers:**
-- *chunk* = actions predicted per forward pass
-- *exec_steps* = actions executed in simulation before running the next forward pass
+- *chunk_size* = actions predicted per forward pass
+- *execution_steps* = actions executed in simulation before running the next forward pass
+
+Both numbers go on the `PolicySignature` as `chunk_size=` and
+`execution_steps=`. Read `chunk_size` from the model config, usually a field
+named like `action_horizon`. Read `execution_steps` from the project's eval or
+client code. For example, the LIBERO client in openpi sets `replan_steps=5`.
 
 Find the chunk-returning method (e.g. `predict_action_chunk` is common), and
 call that from your driver. Let manifold-sdk's queue handle open-loop dispensing.
@@ -185,8 +190,8 @@ must be authored first.
 >   gripper           = ?  (source: file:line)
 >   delta             = ?  (source: file:line)
 >   frame             = ?  (source: file:line)
->   chunk             = ?  (source: file:line)
->   exec_steps        = ?  (source: file:line)
+>   chunk_size        = ?  (source: file:line)
+>   execution_steps    = ?  (source: file:line)
 >   normalization     = yes|no, location: ?
 >   checkpoint        = ?
 >   cameras           = [{name, shape, orientation}]
@@ -220,8 +225,8 @@ is a decision, not implementation.
 | Profile instance (`POLICYNAME_BENCHMARKNAME = MyProfile(...)`) | pairing file |
 | `PROFILE`, `BENCHMARK`, `PIPELINE` module-level names | pairing file |
 
-`profile.py` defines the Profile class and its fields (weights, chunk size,
-layouts, and so on). The pairing file creates one and fills those fields with
+`profile.py` defines the Profile class and its fields (weights, layouts, and
+so on). The pairing file creates one and fills those fields with
 real values.
 
 ### The signature: what the model emits and consumes
@@ -246,9 +251,10 @@ Anything else is benchmark work, not a wrap.
 - No proprioception? Say so with an empty `Proprioception()`. Don't invent fake data
   to fill the gap.
 - No instruction? Just set `instruction=False`.
-- Don't conflate the two things called "chunk":
-  - One action holding N steps (almost always 1)
-  - Actions predicted per forward pass (often 10)
+- The action space describes a single action. Set `chunk_size=` on the
+  signature to the number of actions that a forward pass predicts (often 10),
+  and `execution_steps=` to the number that the project runs before it
+  predicts again. A policy that predicts a single action leaves both out.
 - The chunk queue needs both `pack` and `unpack`. Skip either and the server crashes.
 
 Spell out every convention field (`rotation=`, `gripper=`, `delta=`, `frame=`)
@@ -266,7 +272,7 @@ The input layout maps observation channels to dictionary keys. The
 output layout maps raw model output back to an action. Key renames
 are entries with no ops.
 
-- **Plain `(chunk, dim)` output**: use
+- **Plain `(chunk_size, dim)` output**: use
   `LayoutEntry(key=..., source=SourceKind.STATE, source_name=None,
   ops=(Slice(start=0, stop=dim),))`. `Slice` takes keyword args only.
   `Slice(0, dim)` raises `TypeError`.
@@ -279,27 +285,30 @@ are entries with no ops.
 ### The profile: the wrap's spec
 
 The profile is a small object that carries the signature, the input
-and output layouts, the weights location, and two chunk-related
-numbers. It also has a `load()` method that opens the model. In
-code it is a frozen dataclass satisfying `recipes.PolicyProfile`,
-with fields `signature`, `default_weights`, `input_layout`,
-`output_layout`, `chunk`, `exec_steps`, and a
+and output layouts, and the weights location. It also has a `load()`
+method that opens the model. In code it is a frozen dataclass
+satisfying `recipes.PolicyProfile`, with fields `signature`,
+`default_weights`, `input_layout`, `output_layout`, and a
 `load(weights, device) -> PolicyEndpoint` method.
+The chunk numbers are on the signature.
 
 Defer the driver import into `load()` so `profile.py` imports without
 the model stack. Take `device` as a `load()` parameter. Checkpoints
 bake in the training device, and the caller passes the runtime one at
 load time.
 
-- **`chunk`/`exec_steps` have no check.** Missing `exec_steps` by exact name
-  fails at the first step in `advance`. Missing `.profile` on the endpoint
-  kills the connection pre-READY: `PairingRejected("policy rejected the
-  pairing (no READY)")`.
+- **A missing chunk field defaults to 1.** If the signature leaves out
+  `execution_steps`, the model runs at every step, and the checks pass. The
+  signature validator rejects an `execution_steps` value outside
+  1..`chunk_size`. An action space with `chunk_size` greater than 1 raises
+  `chunk_size moved to PolicySignature`.
 
 > **Phase 5 checkpoint:**
 > ```
 > PolicySignature:
->   action_space        = {type}(rotation=?, gripper=?, delta=?, frame=?, chunk_size=1)
+>   action_space        = {type}(rotation=?, gripper=?, delta=?, frame=?)
+>   chunk_size          = ?
+>   execution_steps      = ?
 >   action_width_check  = expected_length() == model source width? yes|no
 >   proprioception      = {ee_pose: ..., joint_pos: ...}
 >   cameras             = [{name, shape, dtype}]
@@ -308,7 +317,7 @@ load time.
 > NativeLayout input keys:  [list with source_kind and source_name]
 > NativeLayout output keys: [list with ops]
 >
-> Profile: chunk=?, exec_steps=?, default_weights=?
+> Profile: default_weights=?
 > ```
 
 ---
@@ -335,8 +344,6 @@ class MyProfile:
     default_weights: str
     input_layout: NativeLayout
     output_layout: NativeLayout
-    chunk: int
-    exec_steps: int
 
     def load(self, weights: str, device: str | None):
         from mywrap.driver import MyEndpoint  # deferred: keeps profile.py light
@@ -347,7 +354,7 @@ class MyProfile:
 
 ```python
 import threading
-from manifold.recipes import OpenLoopChunkQueue
+from manifold.recipes import ActionQueue
 
 class MyEndpoint:
     def __init__(self, profile, weights, device=None):
@@ -356,10 +363,6 @@ class MyEndpoint:
         self._model = load_the_model(weights, device)
         self._lock = threading.Lock()
 
-    @property
-    def profile(self):
-        return self._profile
-
     def session(self):
         return MySession(self)
 
@@ -367,7 +370,7 @@ class MyEndpoint:
         with self._lock:
             return self._model.predict_action_chunk(native)   # or whatever
 
-class MySession(OpenLoopChunkQueue):
+class MySession(ActionQueue):
     def _forward(self, native):
         return self._endpoint.forward(native)
 ```
@@ -390,8 +393,6 @@ MYPOLICY_MYBENCH = MyProfile(
     default_weights="...",
     input_layout=INPUT_LAYOUT,
     output_layout=OUTPUT_LAYOUT,
-    chunk=...,
-    exec_steps=...,
 )
 
 PROFILE = MYPOLICY_MYBENCH
@@ -447,8 +448,10 @@ copy. The live check reads it by identity.
 **Keep nothing mutable on the endpoint.** Per-episode state goes in the
 session or a stateful adapter.
 
-**Chunked policy**: subclass `OpenLoopChunkQueue`, implement only `_forward`,
-return the full chunk. Do not build your own chunk buffer.
+**Chunked policy**: subclass `ActionQueue`, implement only `_forward`,
+return the full chunk. Do not build your own chunk buffer. `ActionQueue` takes
+a `PolicyEndpoint` and reads `endpoint.signature.execution_steps`. A driver that
+needs the horizon reads `signature.chunk_size`.
 
 **Instruction**: `native[key]` arrives as `("text",)`. Unwrap with `str(x[0])`.
 
@@ -504,7 +507,7 @@ observation chain first. File as an SDK bug.
 converts between absolute pose and delta pose. If your model wants deltas but
 the benchmark gives absolutes (or vice versa), write the pair yourself: the
 observation adapter writes the current `ee_pose` to the shared dictionary,
-the action adapter subtracts it. For chunked models (`exec_steps > 1`), only
+the action adapter subtracts it. For chunked models (`execution_steps > 1`), only
 the first predicted action has a real reference pose to subtract, since the rest
 would need faked references. Flag it and stop; don't fake it.
 
@@ -563,7 +566,7 @@ for each kind of mismatch:
 | camera name mismatch | no rename adapter, custom adapter needed |
 | camera rank (clip vs frame) | `StackFrameHistory` + clip shape in signature |
 | action width (EE → padded) | `BasePinWiden` (EE→Unified); `UnifiedSliceAdapter` (Unified→EE) |
-| `chunk_size` | set to 1, the chunk lives in raw output |
+| `chunk_size` on the action space | move it to `PolicySignature(chunk_size=..., execution_steps=...)` |
 | `delta` (single-step) | custom stateful adapter pair (see Traps above) |
 | `delta` (chunked) | open problem, flag it |
 | `frame` (action) | no adapter, needs kinematics, STOP |
@@ -646,7 +649,7 @@ edit the wrap to make the episodes match.
 >
 > Live run:
 >   episodes                     = ?
->   forward_count                = ? (expected: ceil(steps / exec_steps) * episodes)
+>   forward_count                = ? (expected: ceil(steps / execution_steps) * episodes)
 >   ran without raising          = yes | no | skipped (machine cannot run the model)
 > ```
 
@@ -659,15 +662,15 @@ edit the wrap to make the episodes match.
       the checks
 - [ ] `read_pairing` accepts the module without the model stack
 - [ ] Action width: `expected_length()` == model source width
-- [ ] `chunk` and `exec_steps` spelled exactly so on the profile; endpoint
-      exposes `.profile`
+- [ ] `chunk_size` and `execution_steps` on the signature, from the model
+      config and the project's eval
 - [ ] Every convention traces to a line in the project's eval (noted in
       docstring)
 - [ ] Signature states what the session returns/consumes, in physical units
 - [ ] Split clean: conventions as adapters, structural maps as layout, only
       normalization/axis-order/derived tensors in the session
-- [ ] Chunked: `OpenLoopChunkQueue` subclass, only `_forward`, both layouts,
-      `chunk_size=1`
+- [ ] Chunked: `ActionQueue` subclass, only `_forward`, both layouts,
+      action space describes a single action
 - [ ] Three-extremes test for each conversion written and NOT written
 - [ ] Nothing mutable on endpoint; `endpoint.signature` is the profile's
       object; instruction unwrapped as `str(x[0])`; `ee_pose` sliced against

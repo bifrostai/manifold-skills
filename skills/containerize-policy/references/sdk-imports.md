@@ -2,7 +2,7 @@
 
 - `manifold.recipes`. `read_pairing`, `launch_server`, `serve`, `evaluate`,
   `run_benchmark`, `run_sharded_benchmark`, `run_episodes`, `write_rollup`,
-  `OpenLoopChunkQueue`, `ChunkEndpoint`, `PolicyProfile`, `resolve`,
+  `ActionQueue`, `PolicyProfile`, `resolve`,
   `from_lerobot_checkpoint` / `SignatureSuggestion`, `describe`, `Recorder`,
   `dump`, `load`, `NO_RECORDER`
 - `manifold.recipes.serving`. `PolicyEndpoint` and `Session` protocols (NOT
