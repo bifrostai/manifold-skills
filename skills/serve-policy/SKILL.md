@@ -141,7 +141,12 @@ line:
   gripper sign convention, whether actions are deltas, and the action
   width.
 - **Chunks.** How many actions one forward pass predicts, and how many
-  of them the project executes before it predicts again.
+  of them the project executes before it predicts again. Read the first
+  number from the model config, usually a field named like
+  `action_horizon`. Read the second number from the project's own
+  evaluation or client code. For example, the LIBERO client in openpi
+  sets `replan_steps=5`. Ask the user only if the code has neither
+  number.
 - **Normalization.** Whether the model returns normalized values. The
   script must return actions in physical units.
 
@@ -204,7 +209,10 @@ Follow these rules:
   out every convention field (`rotation=`, `gripper=`, `delta=`). Do not
   copy the benchmark's values. Check that
   `SIGNATURE.action_space.expected_length()` equals the action width.
-  Below is an example:
+  Set `chunk_size=` to the number of actions in a forward pass, and
+  `execution_steps=` to the number that the project executes before it
+  predicts again. A policy that predicts a single action leaves both
+  fields out. Below is an example:
   ```
   POLICY_SIGNATURE = PolicySignature(
       cameras=(
@@ -223,12 +231,14 @@ Follow these rules:
               gripper=GripperObservationSpec(dim=2),
           ),
       ),
-      action_space=EEActionSpace(
+      action_space=EEActionSpace(   # a single action
           rotation=RotationFormat.AXIS_ANGLE,
           gripper=GripperFormat.SIGNED_OPEN_LOW,
           delta=True,
       ),
       instruction=True,
+      chunk_size=10,                # actions per model call
+      execution_steps=5,             # actions to run before the next call
   )
   ```
 - Load the model at the top of the module, with the project's own
@@ -247,12 +257,18 @@ Follow these rules:
           "observation/state":       obs.state["ee_pose"].astype(np.float32),
           "prompt":                  obs.instruction or "",
       })
-      chunk = np.asarray(out["actions"])[:EXECUTION_STEPS]
-      return Action.from_array(chunk)
+      return Action.from_array(np.asarray(out["actions"]))
   ```
-- Return the executed steps of the chunk as one `Action`, in physical
-  units. Pass `Action.from_array` an array with one row for each
-  executed step.
+- Return the whole chunk as one `Action`, in physical units. Pass
+  `Action.from_array` an array of shape (chunk_size, action width), with
+  one row for each action. The SDK keeps the actions that are left over
+  and calls `predict` again after `execution_steps` actions. At startup,
+  `manifold.serve` calls `predict` once and exits with an error if the
+  shape is wrong.
+- Scores can change when a policy starts to run whole chunks. If the
+  user has served this policy before with a single action for each call,
+  serve the chunked script under a new version. Runs of the two scripts
+  then appear under separate versions.
 - Inside `if __name__ == "__main__":`, call
   `manifold.serve(predict, SIGNATURE)` with no other arguments. The runner sets `MANIFOLD_SERVER_URL`, and
   `manifold.serve` reads it.
@@ -477,8 +493,15 @@ common cause.
    the signature with the project's evaluation code.
 5. **Robot state.** Compare the order and the width of `obs.state` with
    the state that the project's evaluation code (if any) passes to the model.
-6. **Chunk length.** Return the number of steps that the policy
-   executes, not the full chunk that the model predicts.
+6. **Chunk length.** Return the whole chunk from `predict`. Set
+   `execution_steps` to the number of actions that the project executes
+   before it predicts again. If the shape of the chunk does not match
+   `chunk_size`, `manifold.serve` exits at startup. Its error message
+   names both shapes, for example:
+
+   ```
+   `predict` returned 8 actions of 7 values; the signature declares `chunk_size=10` actions of 7 values
+   ```
 7. **Instruction.** Print `obs.instruction` once. A model that needs a
    text instruction fails when it receives an empty string.
 8. **Checkpoint.** Confirm with the user that the checkpoint was trained
