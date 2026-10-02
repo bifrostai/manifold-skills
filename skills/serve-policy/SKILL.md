@@ -25,7 +25,8 @@ The objective is to write one Python file with three critical components:
   outputs of the policy (observations, proprioception, actions,
   instructions, etc.).
 - A `predict(obs: Observation) -> Action` function that passes data to the
-  policy or model.
+  policy or model. If the policy keeps state during an episode, a stateful
+  class with `reset()` and `predict()` takes its place.
 - A call to `manifold.serve(predict, SIGNATURE)`, inside
   `if __name__ == "__main__":`.
 
@@ -265,6 +266,37 @@ Follow these rules:
   and calls `predict` again after `execution_steps` actions. At startup,
   `manifold.serve` calls `predict` once and exits with an error if the
   shape is wrong.
+- If the model keeps state from one step to the next within an episode,
+  write a stateful class instead of `predict`. Examples of such state are
+  a recurrent hidden state, a history of past observations, and a buffer
+  of past chunks for temporal ensembling. `manifold.serve` creates an
+  instance of the class for each shard and calls `reset()` at the start of
+  every episode. The model stays at the top of the module, and the class
+  holds only the state. Example:
+  ```
+  class Policy:
+      """Stateful class where reset() is called at the start of every episode.
+
+      Do not load weights in this class.
+      """
+
+      def reset(self):
+          self.hidden = None
+
+      def predict(self, obs: Observation) -> Action:
+          out, self.hidden = POLICY.infer(
+              {"observation/image": obs.sensors["agentview"]}, self.hidden
+          )
+          return Action.from_array(np.asarray(out["actions"]))
+  ```
+  Pass the class to `manifold.serve(Policy, SIGNATURE)`.
+- Some projects keep the state inside the loaded model object. For
+  example, a LeRobot policy holds its observation queue in the policy
+  object and offers `policy.reset()`. All shards share that object, so
+  their states would mix. In that case, call the model's own reset in
+  `reset()`, submit every run of this policy with `--shards 1`, and tell
+  the user that runs use a single shard because the model keeps its
+  state inside the model object.
 - Scores can change when a policy starts to run whole chunks. If the
   user has served this policy before with a single action for each call,
   serve the chunked script under a new version. Runs of the two scripts
@@ -326,6 +358,9 @@ the chosen benchmark, then follow it:
 manifold run submit <policy>:0.0.1 debug-<family> --name <policy>-debug
 manifold run watch <run-id>
 ```
+
+Add `--shards 1` to `run submit` if the model keeps its state inside the
+model object.
 
 Read `.manifold/serve.log` while the run is in progress. The log shows
 the output of the script and any traceback. The run's log in the app
@@ -515,7 +550,7 @@ what you checked and what you found.
 ## Hand back to the user
 
 Once the debug run scores above zero and the serve process has exited,
-tell the user four things:
+tell the user these things:
 
 - The path of the serving script, `.manifold/serve_<policy>_<benchmark>.py`.
 - The debug score, and the link that `manifold run submit` printed, so
@@ -524,6 +559,8 @@ tell the user four things:
   starts only while the serve command is running.
 - How to stop serving. Give them the tmux command or the `kill -INT`
   command from the "Stop serving" step.
+- If the model keeps its state inside the model object, that every run
+  of this policy needs `--shards 1`, and the reason.
 
 Then ask whether to submit a run against the full benchmark. If the user
 says yes, start the serve command again with the same version, submit
