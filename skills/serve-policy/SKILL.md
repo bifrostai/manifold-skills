@@ -266,6 +266,23 @@ Follow these rules:
   and calls `predict` again after `execution_steps` actions. At startup,
   `manifold.serve` calls `predict` once and exits with an error if the
   shape is wrong.
+- `manifold.serve` calls `predict` from a separate thread for each shard,
+  so calls from different shards run at the same time and share the
+  model at the top of the module. Create one `threading.Lock()` at the
+  top of the module, and hold it around all GPU work in `predict`:
+  moving inputs to the GPU, preprocessing, sampling noise, the model call
+  and any CUDA graph capture. If two shards use the GPU at once, they can
+  break a CUDA graph capture or the random number generator, and every
+  later call fails. A stateful class holds the same lock in its
+  `predict`. Example:
+  ```
+  LOCK = threading.Lock()
+
+  def predict(obs: Observation) -> Action:
+      with LOCK:
+          out = POLICY.infer({...})
+      return Action.from_array(np.asarray(out["actions"]))
+  ```
 - If the model keeps state from one step to the next within an episode,
   write a stateful class instead of `predict`. Examples of such state are
   a recurrent hidden state, a history of past observations, and a buffer
@@ -284,9 +301,10 @@ Follow these rules:
           self.hidden = None
 
       def predict(self, obs: Observation) -> Action:
-          out, self.hidden = POLICY.infer(
-              {"observation/image": obs.sensors["agentview"]}, self.hidden
-          )
+          with LOCK:
+              out, self.hidden = POLICY.infer(
+                  {"observation/image": obs.sensors["agentview"]}, self.hidden
+              )
           return Action.from_array(np.asarray(out["actions"]))
   ```
   Pass the class to `manifold.serve(Policy, SIGNATURE)`.
