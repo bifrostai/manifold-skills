@@ -198,6 +198,20 @@ camera or a robot state that the benchmark does not publish, stop and
 tell the user. The adapters convert differences in format when a run
 connects.
 
+**Choose the cameras.** A benchmark's `sensors` are every camera it can
+render. Before a run, the benchmark asks the policy for its signature and
+renders only the cameras the signature lists, plus one camera of its own
+for the live view. List only the cameras the model reads, because each
+extra camera costs rendering on every step.
+
+Match each camera by viewpoint, not by the project's own image key. The
+name is the only viewpoint information a benchmark receives. Build each
+camera with a constructor from `manifold.sensors`, choosing the view the
+model was trained on, and read its frames by its `CameraName` member, never
+a string. For example, DROID's left exterior camera is
+`CameraName.OVER_SHOULDER_LEFT` on RoboLab. If no name matches that view,
+stop and tell the user.
+
 **Write the script.**
 
 First, create a `.manifold/` directory in the project root if it doesn't
@@ -253,8 +267,8 @@ Follow these rules:
   ```
   def predict(obs: Observation) -> Action:
       out = POLICY.infer({
-          "observation/image":       obs.sensors["agentview"],
-          "observation/wrist_image": obs.sensors["wrist"],
+          "observation/image":       obs.sensors[CameraName.AGENTVIEW],
+          "observation/wrist_image": obs.sensors[CameraName.WRIST],
           "observation/state":       obs.state["ee_pose"].astype(np.float32),
           "prompt":                  obs.instruction or "",
       })
@@ -303,7 +317,7 @@ Follow these rules:
       def predict(self, obs: Observation) -> Action:
           with LOCK:
               out, self.hidden = POLICY.infer(
-                  {"observation/image": obs.sensors["agentview"]}, self.hidden
+                  {"observation/image": obs.sensors[CameraName.AGENTVIEW]}, self.hidden
               )
           return Action.from_array(np.asarray(out["actions"]))
   ```
