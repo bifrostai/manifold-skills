@@ -161,7 +161,7 @@ The image contains, in this order:
    If the container crashes at startup on a missing import, add that
    path. Set `ENV PYTHONPATH=/app` (or wherever you copied to) so the
    imports resolve.
-5. **The wrap module and the launcher** (`profile.py`, `driver.py`,
+5. **The wrap module and the launcher** (`policy_profile.py`, `driver.py`,
    the pairing file, and `serve.py`), copied into the `WORKDIR`.
 
 ### Pin the project source
@@ -295,7 +295,7 @@ if __name__ == "__main__":
 ```
 
 `COPY` the wrap module (the file exporting `PROFILE`, `BENCHMARK`,
-`PIPELINE`, plus `profile.py` and `driver.py`) and the launcher into the
+`PIPELINE`, plus `policy_profile.py` and `driver.py`) and the launcher into the
 `WORKDIR`, then:
 
 ```dockerfile

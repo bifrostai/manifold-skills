@@ -76,14 +76,14 @@ All wrap files live under `<project>/.manifold/<slug>/`, where
 | File | Description | Imports the model? |
 |---|---|---|
 | `.manifold/<slug>/driver.py` | endpoint + session | yes |
-| `.manifold/<slug>/profile.py` | frozen dataclass: signature, weights, layouts, `load()` | no |
+| `.manifold/<slug>/policy_profile.py` | frozen dataclass: signature, weights, layouts, `load()` | no |
 | `.manifold/<slug>/<benchmark>.py` | pairing file, exports `PROFILE` / `BENCHMARK` / `PIPELINE` (one file per benchmark) | no |
 
 - `driver.py` loads the model onto the GPU and runs it.
-- `profile.py` is a lightweight spec describing what the model expects (image sizes, state shape, weights path).
+- `policy_profile.py` is a lightweight spec describing what the model expects (image sizes, state shape, weights path).
 - `<benchmark>.py` is the pairing file. It builds the signature and layouts, instantiates the profile, and declares `PROFILE`, `BENCHMARK`, and `PIPELINE`.
 
-`PROFILE` points at the model spec (from profile.py)
+`PROFILE` points at the model spec (from policy_profile.py)
 `BENCHMARK` points at the test to run
 `PIPELINE` is the list of adapters that translate between the benchmark's data and what the model wants.
 
@@ -219,13 +219,13 @@ is a decision, not implementation.
 
 | Thing | File |
 |---|---|
-| `Profile` class (the dataclass template) | `profile.py` |
+| `Profile` class (the dataclass template) | `policy_profile.py` |
 | `PolicySignature(...)` instance | pairing file |
 | Two `NativeLayout(...)` instances (input + output) | pairing file |
 | Profile instance (`POLICYNAME_BENCHMARKNAME = MyProfile(...)`) | pairing file |
 | `PROFILE`, `BENCHMARK`, `PIPELINE` module-level names | pairing file |
 
-`profile.py` defines the Profile class and its fields (weights, layouts, and
+`policy_profile.py` defines the Profile class and its fields (weights, layouts, and
 so on). The pairing file creates one and fills those fields with
 real values.
 
@@ -292,7 +292,7 @@ satisfying `recipes.PolicyProfile`, with fields `signature`,
 `load(weights, device) -> PolicyEndpoint` method.
 The chunk numbers are on the signature.
 
-Defer the driver import into `load()` so `profile.py` imports without
+Defer the driver import into `load()` so `policy_profile.py` imports without
 the model stack. Take `device` as a `load()` parameter. Checkpoints
 bake in the training device, and the caller passes the runtime one at
 load time.
@@ -331,7 +331,7 @@ Write the driver, assemble the pipeline, pass both checks, then prove it live.
 Write these three files. Each snippet below is the minimum shape. Fill in the
 model-specific logic, then flesh out with the rules that follow.
 
-**`profile.py`**. Frozen dataclass, no model-stack imports at top level:
+**`policy_profile.py`**. Frozen dataclass, no model-stack imports at top level:
 
 ```python
 from dataclasses import dataclass
@@ -346,7 +346,7 @@ class MyProfile:
     output_layout: NativeLayout
 
     def load(self, weights: str, device: str | None):
-        from mywrap.driver import MyEndpoint  # deferred: keeps profile.py light
+        from mywrap.driver import MyEndpoint  # deferred: keeps policy_profile.py light
         return MyEndpoint(self, weights, device)
 ```
 
@@ -382,7 +382,7 @@ and two layouts, instantiates the profile, then declares `PROFILE`,
 ```python
 from manifold.core.pipeline import Pipeline
 from manifold.adapters import PackToNativeLayout, UnpackFromNativeLayout
-from mywrap.profile import MyProfile
+from mywrap.policy_profile import MyProfile
 
 SIGNATURE = PolicySignature(...)
 INPUT_LAYOUT = NativeLayout(entries=(...))
