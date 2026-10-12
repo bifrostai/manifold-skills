@@ -45,7 +45,6 @@ app = modal.App("manifold-<policy>")
 
 image = (
     modal.Image.debian_slim(python_version="<project python version>")
-    .apt_install("git")
     .pip_install("uv")
     .run_commands(
         "uv tool install --python 3.13 manifold-cli --index "
@@ -108,7 +107,9 @@ Notes on the skeleton:
 - The project may install a package from a local path, such as
   `{ path = "../manifold-sdk" }`. The image holds only the project, so
   that path does not exist there. Install the package from its Git
-  repository, pinned to a commit, before you build the image.
+  repository, pinned to a commit, before you build the image. For
+  `manifold-sdk`, use the archive URL from "Install the SDK" in
+  `SKILL.md`.
 - `uv sync --frozen` installs the dependencies from `uv.lock`. If the
   project uses another package manager, replace this step and the
   `uv run` in `SERVE_COMMAND` with that manager's commands.

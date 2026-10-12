@@ -151,7 +151,7 @@ The image contains, in this order:
    supports (conda env, raw `pip`) only if `uv` cannot handle it.
 3. **manifold-sdk**, installed from the full Git commit SHA on the
    policy's **manifold-sdk revision** line:
-   `uv pip install "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git@<commit>"`.
+   `uv pip install "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit>.tar.gz"`.
 4. **The parts of the project folder that the wrap imports from.**
    `driver.py` names what inference needs. Trace its imports (and
    their transitive imports) back to the folders they live in, and
