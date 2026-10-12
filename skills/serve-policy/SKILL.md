@@ -188,7 +188,7 @@ Ask these questions in one round:
 project's package manager. With uv:
 
 ```
-uv add "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git@<commit>"
+uv add "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit>.tar.gz"
 ```
 
 **Read the benchmark.** Find the chosen benchmark in `manifold.benchmarks`.

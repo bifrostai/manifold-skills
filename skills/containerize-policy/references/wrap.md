@@ -54,10 +54,10 @@ nothing else. Do these before writing any wrap code:
   the dependency to that commit's full SHA. With uv:
 
   ```
-  uv add "manifold-sdk @ git+https://github.com/bifrostai/manifold-sdk.git@<commit>"
+  uv add "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit>.tar.gz"
   ```
 
-  With plain `requirements.txt`, add the same pinned Git URL, then run
+  With plain `requirements.txt`, add the same pinned archive URL, then run
   `pip install -r requirements.txt`. Add a **manifold-sdk revision**
   line with the full SHA to the policy's `### <policy-name>` subsection
   in `.manifold/CONTEXT.md`. This records the SDK revision used for the
