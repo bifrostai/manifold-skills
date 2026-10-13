@@ -78,6 +78,7 @@ All wrap files live under `<project>/.manifold/<slug>/`, where
 | `.manifold/<slug>/driver.py` | endpoint + session | yes |
 | `.manifold/<slug>/policy_profile.py` | frozen dataclass: signature, weights, layouts, `load()` | no |
 | `.manifold/<slug>/<benchmark>.py` | pairing file, exports `PROFILE` / `BENCHMARK` / `PIPELINE` (one file per benchmark) | no |
+| `.manifold/<slug>/<benchmark>.spec.json` | the benchmark's spec, from `manifold benchmark spec` | no |
 
 - `driver.py` loads the model onto the GPU and runs it.
 - `policy_profile.py` is a lightweight spec describing what the model expects (image sizes, state shape, weights path).
@@ -171,14 +172,27 @@ Record the answer, and the evidence for it, in the Phase 4 checkpoint.
 
 ### Benchmark side
 
-**Find the target Manifold benchmark** in `manifold.benchmarks` (e.g. LIBERO,
-SIMPLER, ROBOCASA). Use the manifold-sdk's `Benchmark`, not the user's policy
-project's vendored copy.
+**Get the target benchmark's spec from Manifold.** When a benchmark version is
+registered, Manifold saves the benchmark's spec: the cameras, robot state,
+actions and embodiment that the benchmark sends to a policy. The benchmark's
+entry in `manifold.benchmarks` can differ from the spec, so pair against the
+spec. Find the benchmark's owner in the `Owner` column of
+`manifold benchmark list`. List the versions with
+`manifold benchmark versions <org>/<benchmark>`, pick the newest unless the user
+names one, and save that version's spec next to the pairing file:
 
-**Read the `Benchmark`:** `embodiment.action`, `embodiment.proprioception`,
+```
+manifold benchmark spec <org>/<benchmark>:<version> > .manifold/<slug>/<benchmark>.spec.json
+```
+
+If the command says the version was registered without a spec, use the
+benchmark's entry in `manifold.benchmarks` instead, and tell the user the
+pairing was not checked against what the benchmark sends.
+
+**Read the spec:** `embodiment.action`, `embodiment.proprioception`,
 `sensors` (name, resolution, mount), `instruction`.
 
-**If the benchmark is not available**, stop and notify the user. The benchmark
+**If the benchmark is not registered**, stop and notify the user. The benchmark
 must be authored first.
 
 > **Phase 4 checkpoint.** Record before designing anything:
@@ -200,7 +214,8 @@ must be authored first.
 >   proprioception    = ee_pose|joint_pos|none
 >
 > Benchmark side:
->   target_benchmark  = LIBERO|SIMPLER|ROBOCASA|...
+>   target_benchmark  = <org>/<benchmark>:<version>
+>   spec_source       = .manifold/<slug>/<benchmark>.spec.json | manifold.benchmarks entry (no spec registered)
 >   embodiment_action = {type, rotation, gripper, delta, frame}
 >   cameras_published = [{name, shape, orientation}]
 >   instruction       = true|false
@@ -380,6 +395,10 @@ and two layouts, instantiates the profile, then declares `PROFILE`,
 `BENCHMARK`, `PIPELINE`:
 
 ```python
+import json
+from pathlib import Path
+
+from manifold.core.benchmark import Benchmark
 from manifold.core.pipeline import Pipeline
 from manifold.adapters import PackToNativeLayout, UnpackFromNativeLayout
 from mywrap.policy_profile import MyProfile
@@ -396,7 +415,11 @@ MYPOLICY_MYBENCH = MyProfile(
 )
 
 PROFILE = MYPOLICY_MYBENCH
-BENCHMARK = ...    # the manifold.benchmarks entry
+# The spec saved in Phase 4. If the version has no spec, use the
+# benchmark's entry in manifold.benchmarks instead.
+BENCHMARK = Benchmark.from_received(
+    json.loads((Path(__file__).parent / "<benchmark>.spec.json").read_text())
+)
 PIPELINE = Pipeline(
     observation=[...],   # benchmark form -> signature's consumed form
     action=[...],        # signature's emitted form -> benchmark's
@@ -605,7 +628,7 @@ result = evaluate(
 You supply `reset` and `step`: `reset()` starts a new episode and returns the
 first observation; `step(action)` applies an action and returns
 `(next_observation, reward, done, info)`. Together they are a minimal
-stand-in for the benchmark's real physics. Use the catalog `Benchmark` for
+stand-in for the benchmark's real physics. Use `BENCHMARK` for
 shapes and write the simplest possible step logic (integrating action deltas
 into a pose, rendering a frame that changes each step). The run scores
 nothing. It exists to prove the driver runs a full episode without
