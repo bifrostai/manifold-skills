@@ -21,8 +21,6 @@
   `Slice`, `Split`, `BatchAxis`, `DtypeCast`, `Component`, `Assemble`
 - `manifold.core.benchmark`. `Benchmark` (`Benchmark.model_validate_json`
   loads a spec saved from `manifold benchmark spec`)
-- `manifold.benchmarks`. `ALL`, `LIBERO`, `SIMPLER`, `ROBOCASA` (only for a
-  benchmark version registered without a spec)
 - `manifold.adapters`. `PackToNativeLayout`, `UnpackFromNativeLayout`,
   `ObservationTap`, `ActionTap` (convention adapters are one level down)
 - `manifold.adapters.observation`. `ProprioRotationAdapter`,

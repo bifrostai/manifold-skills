@@ -196,8 +196,7 @@ uv add "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit
 version with `manifold benchmark spec <org>/<benchmark>:<version>`. Find
 `<org>` in the `Owner` column of `manifold benchmark list`, and list the
 versions with `manifold benchmark versions <org>/<benchmark>`. If that version
-was registered without a spec, read the benchmark's entry in
-`manifold.benchmarks` instead.
+was registered without a spec, stop and tell the user.
 Read the `sensors`, `embodiment.proprioception`, `embodiment.action` and
 `instruction`. Compare them with the Phase 1 facts. If the model needs a
 camera or a robot state that the benchmark does not publish, stop and

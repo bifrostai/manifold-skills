@@ -174,8 +174,7 @@ Record the answer, and the evidence for it, in the Phase 4 checkpoint.
 
 **Get the target benchmark's spec from Manifold.** When a benchmark version is
 registered, Manifold saves the benchmark's spec: the cameras, robot state,
-actions and embodiment that the benchmark sends to a policy. The benchmark's
-entry in `manifold.benchmarks` can differ from the spec, so pair against the
+actions and embodiment that the benchmark sends to a policy. Pair against that
 spec. Find the benchmark's owner in the `Owner` column of
 `manifold benchmark list`. List the versions with
 `manifold benchmark versions <org>/<benchmark>`, pick the newest unless the user
@@ -185,9 +184,8 @@ names one, and save that version's spec next to the pairing file:
 manifold benchmark spec <org>/<benchmark>:<version> > .manifold/<slug>/<benchmark>.spec.json
 ```
 
-If the command says the version was registered without a spec, use the
-benchmark's entry in `manifold.benchmarks` instead, and tell the user the
-pairing was not checked against what the benchmark sends.
+If the command says the version was registered without a spec, stop and tell
+the user. The benchmark's owner must register a version with a spec first.
 
 `Benchmark.model_validate_json` raises when the saved spec includes a camera that
 is not in this project's `manifold-sdk` revision. Pin a newer `manifold-sdk`
@@ -219,7 +217,6 @@ must be authored first.
 >
 > Benchmark side:
 >   target_benchmark  = <org>/<benchmark>:<version>
->   spec_source       = .manifold/<slug>/<benchmark>.spec.json | manifold.benchmarks entry (no spec registered)
 >   embodiment_action = {type, rotation, gripper, delta, frame}
 >   cameras_published = [{name, shape, orientation}]
 >   instruction       = true|false
@@ -418,8 +415,7 @@ MYPOLICY_MYBENCH = MyProfile(
 )
 
 PROFILE = MYPOLICY_MYBENCH
-# The spec saved in Phase 4. If the version has no spec, use the
-# benchmark's entry in manifold.benchmarks instead.
+# The spec saved in Phase 4.
 BENCHMARK = Benchmark.model_validate_json(
     (Path(__file__).parent / "<benchmark>.spec.json").read_text()
 )
