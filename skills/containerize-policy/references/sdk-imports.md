@@ -19,8 +19,8 @@
 - `manifold.core.native_layout`. `NativeLayout`, `LayoutEntry`
   (`.from_camera` / `.from_state` / `.from_instruction`), `SourceKind`,
   `Slice`, `Split`, `BatchAxis`, `DtypeCast`, `Component`, `Assemble`
-- `manifold.core.benchmark`. `Benchmark` (`Benchmark.from_received` loads a
-  spec saved from `manifold benchmark spec`)
+- `manifold.core.benchmark`. `Benchmark` (`Benchmark.model_validate_json`
+  loads a spec saved from `manifold benchmark spec`)
 - `manifold.benchmarks`. `ALL`, `LIBERO`, `SIMPLER`, `ROBOCASA` (only for a
   benchmark version registered without a spec)
 - `manifold.adapters`. `PackToNativeLayout`, `UnpackFromNativeLayout`,

@@ -189,6 +189,10 @@ If the command says the version was registered without a spec, use the
 benchmark's entry in `manifold.benchmarks` instead, and tell the user the
 pairing was not checked against what the benchmark sends.
 
+`Benchmark.model_validate_json` raises when the saved spec includes a camera that
+is not in this project's `manifold-sdk` revision. Pin a newer `manifold-sdk`
+commit.
+
 **Read the spec:** `embodiment.action`, `embodiment.proprioception`,
 `sensors` (name, resolution, mount), `instruction`.
 
@@ -395,7 +399,6 @@ and two layouts, instantiates the profile, then declares `PROFILE`,
 `BENCHMARK`, `PIPELINE`:
 
 ```python
-import json
 from pathlib import Path
 
 from manifold.core.benchmark import Benchmark
@@ -417,8 +420,8 @@ MYPOLICY_MYBENCH = MyProfile(
 PROFILE = MYPOLICY_MYBENCH
 # The spec saved in Phase 4. If the version has no spec, use the
 # benchmark's entry in manifold.benchmarks instead.
-BENCHMARK = Benchmark.from_received(
-    json.loads((Path(__file__).parent / "<benchmark>.spec.json").read_text())
+BENCHMARK = Benchmark.model_validate_json(
+    (Path(__file__).parent / "<benchmark>.spec.json").read_text()
 )
 PIPELINE = Pipeline(
     observation=[...],   # benchmark form -> signature's consumed form
