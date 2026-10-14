@@ -57,7 +57,10 @@ question you can answer here.
 
 - **manifold CLI.** Confirm it is installed and the user is
   authenticated. If not, stop and tell the user to install it and run
-  `manifold auth login`.
+  `manifold auth login`. `manifold --version` must print 0.0.26 or
+  later, the first release with `manifold benchmark spec`. If the
+  printed version is older, tell the user to run
+  `uv tool upgrade manifold-cli`.
 - **The project.** Figure out which package manager it uses, which
   folders hold the Python source the wrap will import from, and
   whether `.manifold/` already exists (see "Start at the right

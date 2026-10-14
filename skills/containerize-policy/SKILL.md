@@ -12,11 +12,12 @@ description: >
   to ghcr", or "register my policy on the platform". To serve a policy from
   the user's own machine, use `/serve-policy` instead.
 compatibility: >
-  Run from the user's policy project directory. Requires the manifold CLI on
-  PATH, authenticated with `manifold auth login`, and a Python project with a
-  file that lists its dependencies (pyproject.toml, requirements.txt,
-  Pipfile, environment.yml, or setup.py). Stage 3 also requires docker and a
-  push credential for the target container registry (ghcr by default).
+  Run from the user's policy project directory. Requires manifold CLI
+  0.0.26 or later on PATH, authenticated with `manifold auth login`, and a
+  Python project with a file that lists its dependencies (pyproject.toml,
+  requirements.txt, Pipfile, environment.yml, or setup.py). Stage 3 also
+  requires docker and a push credential for the target container registry
+  (ghcr by default).
   Everything this skill writes goes inside `<project>/.manifold/`.
 ---
 

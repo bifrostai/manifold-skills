@@ -295,7 +295,8 @@ if __name__ == "__main__":
 ```
 
 `COPY` the wrap module (the file exporting `PROFILE`, `BENCHMARK`,
-`PIPELINE`, plus `policy_profile.py` and `driver.py`) and the launcher into the
+`PIPELINE`, plus `policy_profile.py`, `driver.py` and the benchmark's
+`.spec.json`) and the launcher into the
 `WORKDIR`, then:
 
 ```dockerfile

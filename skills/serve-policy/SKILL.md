@@ -8,8 +8,9 @@ description: >
   "setup", "connect to manifold", "run evals", "serve my policy", or
   equivalent.
 compatibility: >
-  Run from the user's policy project directory. Needs the manifold CLI,
-  logged in, with `manifold policy serve NAME:VERSION -- COMMAND`.
+  Run from the user's policy project directory. Needs manifold CLI 0.0.26
+  or later, logged in, with `manifold policy serve NAME:VERSION -- COMMAND`
+  and `manifold benchmark spec`.
   Needs a manifold-sdk revision that exports `manifold.serve`. This machine
   must be able to run the model, so it needs a GPU.
 ---
@@ -191,8 +192,12 @@ project's package manager. With uv:
 uv add "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit>.tar.gz"
 ```
 
-**Read the benchmark.** Find the chosen benchmark in `manifold.benchmarks`.
-Read its `sensors`, `embodiment.proprioception`, `embodiment.action` and
+**Read the benchmark.** Print the spec of the chosen benchmark's newest
+version with `manifold benchmark spec <org>/<benchmark>:<version>`. Find
+`<org>` in the `Owner` column of `manifold benchmark list`, and list the
+versions with `manifold benchmark versions <org>/<benchmark>`. If that version
+was registered without a spec, stop and tell the user.
+Read the `sensors`, `embodiment.proprioception`, `embodiment.action` and
 `instruction`. Compare them with the Phase 1 facts. If the model needs a
 camera or a robot state that the benchmark does not publish, stop and
 tell the user. The adapters convert differences in format when a run

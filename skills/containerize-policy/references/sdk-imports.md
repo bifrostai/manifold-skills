@@ -19,7 +19,8 @@
 - `manifold.core.native_layout`. `NativeLayout`, `LayoutEntry`
   (`.from_camera` / `.from_state` / `.from_instruction`), `SourceKind`,
   `Slice`, `Split`, `BatchAxis`, `DtypeCast`, `Component`, `Assemble`
-- `manifold.benchmarks`. `ALL`, `LIBERO`, `SIMPLER`, `ROBOCASA`
+- `manifold.core.benchmark`. `Benchmark` (`Benchmark.model_validate_json`
+  loads a spec saved from `manifold benchmark spec`)
 - `manifold.adapters`. `PackToNativeLayout`, `UnpackFromNativeLayout`,
   `ObservationTap`, `ActionTap` (convention adapters are one level down)
 - `manifold.adapters.observation`. `ProprioRotationAdapter`,
