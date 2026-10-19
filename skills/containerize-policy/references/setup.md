@@ -62,9 +62,13 @@ question you can answer here.
   printed version is older, tell the user to run
   `uv tool upgrade manifold-cli`.
 - **The project.** Figure out which package manager it uses, which
-  folders hold the Python source the wrap will import from, and
-  whether `.manifold/` already exists (see "Start at the right
-  stage").
+  install command it uses, which folders hold the Python source the
+  wrap will import from, and whether `.manifold/` already exists (see
+  "Start at the right stage"). Read the install command from the README's install steps.
+  Write it with all of its flags. For example, Cosmos-Policy installs
+  with `uv sync --extra cu128 --group libero`. If uv runs without the
+  project's flags, uv can replace the project's torch with the build
+  from PyPI.
 - **The machine.** Look up five things. Run `uname -s` for the OS and
   `uname -m` for the CPU architecture. Run `nvidia-smi` to see
   whether an NVIDIA GPU is present, and read its CUDA version and
@@ -221,8 +225,9 @@ nothing to say about.
 Sections:
 
 - `# Manifold context for this project`
-- `## Project`. Package manager, the dependency file it uses, Python
-  version, source folders, ML framework.
+- `## Project`. Package manager, the dependency file it uses, the
+  install command with all of its flags, Python version, source
+  folders, ML framework.
 - `## Registry`. The service URL and the account or organization
   the image goes under.
 

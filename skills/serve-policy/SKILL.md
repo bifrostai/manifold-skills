@@ -122,8 +122,25 @@ cloud platform, offer that platform first.
 CLI with `uv tool upgrade manifold-cli`. Run `manifold auth status`. If
 the user is not logged in, ask them to run `manifold auth login`.
 
-**The codebase.** Find the package manager from the lockfile or the
-dependency file. Find the code that loads the model and runs inference,
+**The environment.** Find out how the project installs its dependencies
+and how it starts a Python script. Read the install steps in the README.
+Read the dependency files, such as `pyproject.toml`, `uv.lock`,
+`environment.yml` and `requirements.txt`. Record these facts with their
+file and line:
+
+- **The install command, with all of its flags.** For example,
+  Cosmos-Policy installs with `uv sync --extra cu128 --group libero`.
+- **The run command.** This command starts Python in the project's
+  environment, such as `uv run --extra cu128 --group libero python` or
+  `conda run -n <env> python`.
+- **The torch version.** Print it with
+  `<run command> -c "import torch; print(torch.__version__)"`.
+
+Use the install command and the run command when you add the SDK and
+when you serve. If you run uv without the project's flags, uv can
+replace the project's torch with the build from PyPI.
+
+**The codebase.** Find the code that loads the model and runs inference,
 usually in files named like `eval*`, `infer*`, `serve*` or `rollout*`.
 Find the checkpoint that it loads. If there are multiple checkpoints,
 ask the user which one they want to start with.
@@ -173,6 +190,9 @@ Ask these questions in one round:
   zero.
 - **What to call the policy on Manifold.** Offer the project folder name
   as the first option.
+- **How the project installs and starts a script.** Ask this only if the
+  README and the dependency files leave the commands unclear. Offer the
+  closest commands that you found as the first option.
 - **May the skill add `manifold-sdk` to the project?** Say that this
   installs one package.
 - **Only when serving from a cloud container: which platform and which
@@ -185,12 +205,24 @@ Ask these questions in one round:
 ## Phase 3: Execute
 
 **Install the SDK.** Pin the newest commit on the default branch of the
-`manifold-sdk` GitHub repository to its full SHA. Add it with the
-project's package manager. With uv:
+`manifold-sdk` GitHub repository to its full SHA. Add the SDK to the
+project's environment. Then run the install command from Phase 1. With
+uv, pass `--no-sync` so that uv leaves the environment as it is until the
+install command runs:
 
 ```
-uv add "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit>.tar.gz"
+uv add --no-sync "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit>.tar.gz"
+<install command>
 ```
+
+With Conda, install the SDK with pip inside the env:
+
+```
+conda run -n <env> pip install "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit>.tar.gz"
+```
+
+Print the torch version again with the run command. If the version
+differs from the version in Phase 1, stop and tell the user.
 
 **Read the benchmark.** Print the spec of the chosen benchmark's newest
 version with `manifold benchmark spec <org>/<benchmark>:<version>`. Find
@@ -338,8 +370,8 @@ If the user serves from a cloud container, follow the "Serve from a
 cloud container" section from here.
 
 **Serve.** Start the serve command so that it keeps running after your
-shell exits. Run it from the project root, with the project's run
-command in place of `uv run`. Run it outside the sandbox, with escalated
+shell exits. Run it from the project root. Replace `<run command>` with
+the run command from Phase 1. Run it outside the sandbox, with escalated
 permissions, because the script needs the GPU and the network. If the
 harness cannot start a process outside the sandbox, ask the user to run
 the commands below in their own terminal.
@@ -355,13 +387,13 @@ Use tmux if `which tmux` finds it. Otherwise use `setsid nohup`.
    serving" step describes before you start it again.
 
    ```
-   tmux new -d -s manifold-<policy> 'manifold policy serve <policy>:0.0.1 -- uv run .manifold/serve_<policy>_<benchmark>.py > .manifold/serve.log 2>&1'
+   tmux new -d -s manifold-<policy> 'manifold policy serve <policy>:0.0.1 -- <run command> .manifold/serve_<policy>_<benchmark>.py > .manifold/serve.log 2>&1'
    ```
 
 2. Without tmux:
 
    ```
-   setsid nohup manifold policy serve <policy>:0.0.1 -- uv run .manifold/serve_<policy>_<benchmark>.py > .manifold/serve.log 2>&1 &
+   setsid nohup manifold policy serve <policy>:0.0.1 -- <run command> .manifold/serve_<policy>_<benchmark>.py > .manifold/serve.log 2>&1 &
    echo $! > .manifold/serve.pid
    ```
 
@@ -515,7 +547,9 @@ again.
 - **The script exits before `Ready`.** The serve output shows the
   traceback. An import error usually means that the serve command used a
   different environment. Start the serve command from the project root,
-  with the project's own run command.
+  with the run command from Phase 1. If `torch.cuda.is_available()`
+  returns `False`, print the torch version. Compare it with the version
+  from Phase 1.
 - **Serve stops while the model loads.** Serve waits 15 minutes for the
   script to accept connections. If the weights take longer to download,
   download them once before you serve.

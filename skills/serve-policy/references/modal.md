@@ -38,7 +38,7 @@ PROJECT = Path(__file__).resolve().parent.parent
 REMOTE_PROJECT = "/root/project"
 SERVE_COMMAND = [
     "manifold", "policy", "serve", "<policy>:<version>",
-    "--", "uv", "run", ".manifold/serve_<policy>_<benchmark>.py",
+    "--", <run command>, ".manifold/serve_<policy>_<benchmark>.py",
 ]
 
 app = modal.App("manifold-<policy>")
@@ -56,7 +56,7 @@ image = (
         ignore=[".venv", ".git", ".manifold/*.log", ".manifold/*.pid"],
     )
     .workdir(REMOTE_PROJECT)
-    .run_commands("uv sync --frozen")
+    .run_commands("<install command>")
 )
 
 weights = modal.Volume.from_name("manifold-<policy>-weights", create_if_missing=True)
@@ -110,9 +110,13 @@ Notes on the skeleton:
   repository, pinned to a commit, before you build the image. For
   `manifold-sdk`, use the archive URL from "Install the SDK" in
   `SKILL.md`.
-- `uv sync --frozen` installs the dependencies from `uv.lock`. If the
-  project uses another package manager, replace this step and the
-  `uv run` in `SERVE_COMMAND` with that manager's commands.
+- Replace `<install command>` with the install command from Phase 1 in
+  `SKILL.md`. For a uv project, add `--frozen`, such as
+  `uv sync --frozen --extra cu128 --group libero`. The `--frozen` flag
+  makes uv install the versions in `uv.lock`.
+- Replace `<run command>` with the run command from Phase 1. Write each
+  word as its own string, such as
+  `"uv", "run", "--extra", "cu128", "--group", "libero", "python"`.
 - `uv tool install` puts the `manifold` command in `/root/.local/bin`.
   The `PATH` setting makes it available to the function.
 - `HF_HOME` points Hugging Face downloads at the weights volume. If the
