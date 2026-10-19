@@ -402,9 +402,27 @@ Use tmux if `which tmux` finds it. Otherwise use `setsid nohup`.
    the agent's shell or the user's SSH session closes.
 
 Use `0.0.1` unless the user named a version. The script loads the model
-first, which can take minutes. Read the output with
-`tail -n 50 .manifold/serve.log`, and wait for the line that starts with
-`Ready`.
+first, which can take minutes. Wait for serve with this command:
+
+```
+manifold policy wait <policy>:0.0.1
+```
+
+The command returns within 2 minutes. Act on its exit code:
+
+- `0`: serve is ready. Submit the debug run.
+- `3`: the script asks a question, and serve waits for the answer. Find
+  the code that asks it by searching the project and its virtual
+  environment for the text of the question. Read that code, choose the
+  answer that the project needs, then run
+  `manifold policy answer <policy>:0.0.1 '<answer>'` and wait again. If
+  the question asks for a password, a token, or agreement to a license,
+  ask the user instead. For example, LIBERO asks for a dataset path on its
+  first import. Answer `N` to keep the default path, unless the project
+  sets another dataset folder.
+- `4`: serve is still loading. Run `manifold policy wait` again.
+- `1`: serve stopped. Read the last lines of `.manifold/serve.log` for the
+  reason, and go to Troubleshooting.
 
 **Run the debug benchmark.** Submit a run against the debug variant of
 the chosen benchmark, then follow it:
@@ -550,6 +568,12 @@ again.
   with the run command from Phase 1. If `torch.cuda.is_available()`
   returns `False`, print the torch version. Compare it with the version
   from Phase 1.
+- **The script exits before `Ready` with `EOFError`.** The script asked
+  a question on a machine where serve cannot pass answers, such as macOS.
+  Serve gives the script an empty stdin there, so the question fails at
+  once. The question is in `.manifold/serve.log`, above the traceback.
+  Answer it once outside serve, then serve again. For LIBERO, run
+  `printf 'N\n' | <run command> -c "import libero.libero"`.
 - **Serve stops while the model loads.** Serve waits 15 minutes for the
   script to accept connections. If the weights take longer to download,
   download them once before you serve.
