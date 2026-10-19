@@ -51,11 +51,16 @@ nothing else. Do these before writing any wrap code:
 - Add `manifold-sdk` to the project's dependency file **and** install
   it into the project's environment. Start with the most recent commit
   on the `manifold-sdk` GitHub repository's default branch, then pin
-  the dependency to that commit's full SHA. With uv:
+  the dependency to that commit's full SHA. With uv, pass `--no-sync`.
+  Then run the install command from `CONTEXT.md`:
 
   ```
-  uv add "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit>.tar.gz"
+  uv add --no-sync "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit>.tar.gz"
+  <install command>
   ```
+
+  The `--no-sync` flag makes uv leave the environment as it is until the
+  install command runs.
 
   With plain `requirements.txt`, add the same pinned archive URL, then run
   `pip install -r requirements.txt`. Add a **manifold-sdk revision**

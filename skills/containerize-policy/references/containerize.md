@@ -144,11 +144,13 @@ The image contains, in this order:
    trained on. Pin it by digest, not by a floating tag like `latest`,
    so rebuilds are reproducible. If unsure, an official CUDA runtime
    image on Ubuntu for the trained CUDA version is a safe default.
-2. **The model project's dependencies**, installed with `uv`. In most
-   cases: `uv sync` if the project has a `pyproject.toml` and
-   `uv.lock`, or `uv pip install -r requirements.txt` if it only ships
-   a requirements file. Fall back to whatever the project actually
-   supports (conda env, raw `pip`) only if `uv` cannot handle it.
+2. **The model project's dependencies**, installed with `uv`. Use the
+   install command from `CONTEXT.md`, with all of its flags. For a uv
+   project, add `--frozen`, such as
+   `uv sync --frozen --extra cu128 --group libero`. If the project only
+   ships a requirements file, use `uv pip install -r requirements.txt`.
+   Fall back to whatever the project actually supports (conda env, raw
+   `pip`) only if `uv` cannot handle it.
 3. **manifold-sdk**, installed from the full Git commit SHA on the
    policy's **manifold-sdk revision** line:
    `uv pip install "manifold-sdk @ https://github.com/bifrostai/manifold-sdk/archive/<commit>.tar.gz"`.
