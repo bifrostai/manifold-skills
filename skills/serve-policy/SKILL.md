@@ -40,9 +40,9 @@ raw model expects, instead of what the benchmark sends.
 
 `manifold policy serve` starts the script once, in the same directory and
 with the same environment. When the script accepts connections, serve
-registers the policy and this machine, and prints a line that starts with
-`Ready`. Every run that the user submits for that version goes to this
-script, so the model loads only once.
+registers the policy and this machine, and prints
+`✓ Ready. Serving <policy>:<version>`. Every run that the user submits
+for that version goes to this script, so the model loads only once.
 
 When complete, the user should have `manifold-sdk` installed in the
 project, alongside a new serving script for their policy-benchmark pair.
@@ -232,8 +232,9 @@ was registered without a spec, stop and tell the user.
 Read the `sensors`, `embodiment.proprioception`, `embodiment.action` and
 `instruction`. Compare them with the Phase 1 facts. If the model needs a
 camera or a robot state that the benchmark does not publish, stop and
-tell the user. The adapters convert differences in format when a run
-connects.
+tell the user. The adapters convert some differences in format when a
+run connects. The "Check the pairing" step shows whether they convert
+every difference for this pair.
 
 **Write the script.**
 
@@ -357,14 +358,79 @@ Follow these rules:
   serve the chunked script under a new version. Runs of the two scripts
   then appear under separate versions.
 - Inside `if __name__ == "__main__":`, call
-  `manifold.serve(predict, SIGNATURE)` with no other arguments. The runner sets `MANIFOLD_SERVER_URL`, and
-  `manifold.serve` reads it.
+  `manifold.serve(predict, SIGNATURE)`. Add `pipeline=PIPELINE` only when
+  the "Check the pairing" step needs one. The runner sets
+  `MANIFOLD_SERVER_URL`, and `manifold.serve` reads it.
   ```
   if __name__ == "__main__":
       manifold.serve(predict, POLICY_SIGNATURE)
   ```
 - Import the model from the project. Do not copy model code, and do not
   change other project files.
+
+**Check the pairing.** Check that the benchmark's data converts into the
+signature before you serve. When a run connects, `manifold.serve` builds
+a pipeline from the built-in adapters, unless the script passes its own.
+If no pipeline bridges the pair there, the whole run fails, and the run's
+error does not name the difference. Run this from the project root.
+Replace `<run command>` with the run command from Phase 1, and
+`SIGNATURE` with the name of the signature in the script. The script
+loads the model when it is imported, so the check takes as long as one
+model load.
+
+```
+manifold benchmark spec <org>/<benchmark>:<version> > .manifold/spec.json
+<run command> - <<'EOF'
+import importlib.util, json
+from manifold.core.benchmark import Benchmark
+from manifold.core.check import check_compatibility
+from manifold.recipes.local import _default_pool
+from manifold.recipes.resolve import resolve
+
+path = ".manifold/serve_<policy>_<benchmark>.py"
+spec = importlib.util.spec_from_file_location("serve_script", path)
+script = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(script)
+signature = script.SIGNATURE
+benchmark = Benchmark.from_received(json.load(open(".manifold/spec.json")))
+pool = _default_pool(signature, benchmark)
+pipeline = getattr(script, "PIPELINE", None) or resolve(signature, benchmark, pool)
+if pipeline is not None and check_compatibility(signature, benchmark, pipeline).ok:
+    print("bridged:", pipeline)
+else:
+    # Search the cameras alone, so a reason names only a side that cannot be bridged.
+    same_action = signature.model_copy(update={"action_space": benchmark.embodiment.action})
+    cameras_bridged = pipeline is None and resolve(same_action, benchmark, pool) is not None
+    for reason in check_compatibility(signature, benchmark, pipeline).reasons:
+        if not (cameras_bridged and reason.startswith("observation")):
+            print("cannot bridge:", reason)
+EOF
+```
+
+If the output starts with `bridged:`, go on to serve. If it prints
+`cannot bridge:` lines, compare each one with the model first. If the
+signature misdescribes the model, fix the signature to match the model
+and run the check again.
+
+If the signature is right, the policy brings the conversion in its own
+pipeline. Do not change the signature to match the benchmark, and do not
+convert the value inside `predict`. List the adapters with
+`<run command> -c "import manifold.adapters.action as a, manifold.adapters.observation as o; print(a.__all__, o.__all__)"`,
+and read the docstring of each candidate. Define `PIPELINE` in the
+script, next to the signature, and pass it with
+`manifold.serve(predict, SIGNATURE, pipeline=PIPELINE)`. A passed
+pipeline replaces the built-in one, so it holds every adapter the pair
+needs, including the camera resizes and flips:
+
+```
+PIPELINE = Pipeline(
+    observation=[<observation adapters>],
+    action=[<action adapters>],
+)
+```
+
+Run the check again. If no adapter converts a difference, stop and tell
+the user that difference in one sentence.
 
 If the user serves from a cloud container, follow the "Serve from a
 cloud container" section from here.
@@ -403,8 +469,11 @@ Use tmux if `which tmux` finds it. Otherwise use `setsid nohup`.
 
 Use `0.0.1` unless the user named a version. The script loads the model
 first, which can take minutes. Read the output with
-`tail -n 50 .manifold/serve.log`, and wait for the line that starts with
-`Ready`.
+`tail -n 50 .manifold/serve.log`, and wait for the line
+`✓ Ready. Serving <policy>:0.0.1`. The line starts with a check mark, so
+match `Ready\.` anywhere in the line, for example
+`grep -q 'Ready\.' .manifold/serve.log`. Do not match `^Ready`. Stop
+waiting if the serve process exits, and read the log.
 
 **Run the debug benchmark.** Submit a run against the debug variant of
 the chosen benchmark, then follow it:
@@ -505,8 +574,9 @@ the PID to `.manifold/cloud.pid`.
 
 At the first start, `manifold auth login` prints a link after `Visit`,
 and a code after `confirm code`. Show both to the user, and ask the user
-to open the link. Then wait for a line that starts with `Ready` in
-`.manifold/cloud.log`.
+to open the link. Then wait for the line `✓ Ready. Serving
+<policy>:<version>` in `.manifold/cloud.log`. Match `Ready\.` anywhere in
+the line, not `^Ready`.
 
 The platform bills the GPU while the container waits for work. Start
 the container right before you submit a run.
@@ -554,10 +624,10 @@ again.
   script to accept connections. If the weights take longer to download,
   download them once before you serve.
 - **The run fails as it connects, with a `ValueError`.** The adapters
-  cannot convert the benchmark's data into the signature. Compare the
-  camera names, the robot state and the action type in the signature
-  against the benchmark. If the signature is wrong, fix it to match the
-  model. Do not change it to match the benchmark.
+  cannot convert the benchmark's data into the signature. Run the
+  "Check the pairing" step. It names each difference. If the signature
+  is wrong, fix it to match the model. Otherwise pass a pipeline, as that
+  step describes. Do not change the signature to match the benchmark.
 - **The script fails inside `predict`.** The traceback usually names a
   shape or a key. Print the shape of each value in `obs.sensors` and
   `obs.state` once, and compare it with the model's input.
