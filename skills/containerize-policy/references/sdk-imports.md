@@ -1,10 +1,9 @@
 # manifold-sdk import paths
 
 - `manifold.recipes`. `read_pairing`, `launch_server`, `serve`, `evaluate`,
-  `run_benchmark`, `run_sharded_benchmark`, `run_episodes`, `write_rollup`,
   `ActionQueue`, `PolicyProfile`, `resolve`,
   `from_lerobot_checkpoint` / `SignatureSuggestion`, `describe`, `Recorder`,
-  `dump`, `load`, `NO_RECORDER`
+  `dump`, `load`
 - `manifold.recipes.serving`. `PolicyEndpoint` and `Session` protocols (NOT
   re-exported by `manifold.recipes`)
 - `manifold.core.check`. `check_compatibility` returns `Report`
