@@ -420,14 +420,12 @@ and read the docstring of each candidate. Define `PIPELINE` in the
 script, next to the signature, and pass it with
 `manifold.serve(predict, SIGNATURE, pipeline=PIPELINE)`. A passed
 pipeline replaces the built-in one, so it holds every adapter the pair
-needs, including the camera resizes and flips. For example, a model
-that outputs the gripper from 0 to 1, for a benchmark that expects 0 or
-1:
+needs, including the camera resizes and flips:
 
 ```
 PIPELINE = Pipeline(
-    observation=[ResizeCameras(targets={"wrist": (180, 320, 3)})],
-    action=[JointGripperPolarityAdapter(target=GripperFormat.BINARY_OPEN_LOW)],
+    observation=[<observation adapters>],
+    action=[<action adapters>],
 )
 ```
 
