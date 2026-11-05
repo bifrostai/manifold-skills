@@ -536,7 +536,7 @@ its image definition. The container needs these parts:
 
 - An image that holds the project, its dependencies and `manifold-sdk`.
   The image also needs the manifold CLI. Install the CLI with
-  `uv tool install --python 3.13 manifold-cli --index https://bifrost-manifold-releases.s3.us-west-2.amazonaws.com/simple/`.
+  `uv tool install --python 3.13 manifold-cli`.
   The CLI needs Python 3.13. Without `--python 3.13`, uv uses the
   image's Python and fails when that Python is older.
 - A copy of the project that leaves out `.manifold/*.log` and

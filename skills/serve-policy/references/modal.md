@@ -46,10 +46,7 @@ app = modal.App("manifold-<policy>")
 image = (
     modal.Image.debian_slim(python_version="<project python version>")
     .pip_install("uv")
-    .run_commands(
-        "uv tool install --python 3.13 manifold-cli --index "
-        "https://bifrost-manifold-releases.s3.us-west-2.amazonaws.com/simple/"
-    )
+    .run_commands("uv tool install --python 3.13 manifold-cli")
     .env({"PATH": "/root/.local/bin:/usr/local/bin:/usr/bin:/bin"})
     .add_local_dir(
         PROJECT, REMOTE_PROJECT, copy=True,
