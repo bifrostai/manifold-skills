@@ -479,9 +479,13 @@ waiting if the serve process exits, and read the log.
 the chosen benchmark, then follow it:
 
 ```
-manifold run submit <policy>:0.0.1 debug-<family> --name <policy>-debug
+manifold run submit <policy>:0.0.1 debug-<family> --name <policy>-debug --yes
 manifold run watch <run-id>
 ```
+
+For an organization with billing turned on, `run submit` bills the
+organization for the run and asks to confirm it. Ask the user whether
+to submit the run before you pass `--yes`.
 
 Add `--shards 1` to `run submit` if the model keeps its state inside the
 model object.

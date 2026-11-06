@@ -460,9 +460,13 @@ run against the debug variant if one is listed, otherwise against
 the named benchmark.
 
 ```sh
-manifold run submit <policy-slug> <debug-or-benchmark-slug>
+manifold run submit <policy-slug> <debug-or-benchmark-slug> --yes
 manifold run watch <run-id>
 ```
+
+For an organization with billing turned on, `run submit` bills the
+organization for the run and asks to confirm it. Ask the user whether
+to submit the run before you pass `--yes`.
 
 If the pairing is rejected on the debug variant, submit against the
 named benchmark and report the mismatch to the Bifrost team. After a
