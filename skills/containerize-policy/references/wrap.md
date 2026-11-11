@@ -199,6 +199,36 @@ commit.
 **Read the spec:** `embodiment.action`, `embodiment.proprioception`,
 `sensors` (name, resolution, mount), `instruction`.
 
+**Read how the benchmark runs.** The spec also states:
+
+- `step_seconds`: the simulated time between two steps. 0.05 is 20 Hz.
+- `max_steps`: the step limit of an episode. It is null when each task has
+  its own limit.
+- `image_format`: how camera images are sent to the policy. `jpeg` images are
+  JPEG-compressed on the way, so they differ slightly from the rendered
+  pixels. `raw` images arrive exactly as rendered.
+- `action_range`: the values that the benchmark's action accepts. It is null
+  when the benchmark declares no range.
+
+The benchmark's page on https://docs.manifold.bifrost.ai/benchmarks/ states
+the same step period, step limit and image format under Contract, and each
+task's own limit when there is one. Check that the page and the spec agree,
+and tell the user if they do not. A spec with none of these four keys comes
+from a version registered before benchmarks stated them. Read the values from
+the page instead.
+
+Pairing does not compare these values, so check each one against the policy:
+
+- Compare `step_seconds` with the control rate of the policy's training data.
+  If they differ, stop and tell the user. The policy's actions would play out
+  faster or slower than in training.
+- Compare `image_format` with the images the policy was trained on. If the
+  benchmark sends `jpeg` and the policy was trained on uncompressed frames, or
+  the other way round, tell the user.
+- If the longest training episode for a task is longer than the step limit,
+  tell the user. The benchmark ends the episode at the limit.
+- If `action_range` is set, check that the policy's output stays inside it.
+
 **If the benchmark is not registered**, stop and notify the user. The benchmark
 must be authored first.
 
@@ -225,6 +255,11 @@ must be authored first.
 >   embodiment_action = {type, rotation, gripper, delta, frame}
 >   cameras_published = [{name, shape, orientation}]
 >   instruction       = true|false
+>   step_seconds      = ?  (policy's training rate: ?, source: ?)
+>   max_steps         = ?|null  (longest training episode: ?)
+>   image_format      = jpeg|raw  (policy's training images: ?)
+>   action_range      = ?|null
+>   values_from       = spec | docs page  (docs page only when the spec has none)
 >
 > Feasible: true|false  (if false: why, and stop)
 > ```
@@ -691,6 +726,9 @@ edit the wrap to make the episodes match.
 - [ ] Action width: `expected_length()` == model source width
 - [ ] `chunk_size` and `execution_steps` on the signature, from the model
       config and the project's eval
+- [ ] Benchmark's `step_seconds`, `max_steps`, `image_format` and
+      `action_range` checked against the policy, and any mismatch told to
+      the user
 - [ ] Every convention traces to a line in the project's eval (noted in
       docstring)
 - [ ] Signature states what the session returns/consumes, in physical units
